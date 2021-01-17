@@ -4,8 +4,8 @@
 
 ; This file is a part of FastMM4-AVX.
 ; - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
-; - Copyright (C) 2020 Maxim Masiutin. All rights reserved.
-; Written by Maxim Masiutin <maxim.masiutin@gmail.com>
+; - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
+; Written by Maxim Masiutin <maxim@masiutin.com>
 
 ; FastMM4-AVX is a fork of the Fast Memory Manager 4.992 by Pierre le Riche
 
@@ -16,13 +16,13 @@
 ; https://www.gnu.org/licenses/lgpl.html).
 
 ; This code uses zmm26 - zmm31 registers to avoid AVX-SSE transition penalty.
-; These regsters (zmm16 - zmm31) have no non-VEX counterpart. According to the 
-; advise of Agner Fog, there is no state transition and no penalty for mixing 
+; These regsters (zmm16 - zmm31) have no non-VEX counterpart. According to the
+; advise of Agner Fog, there is no state transition and no penalty for mixing
 ; zmm16 - zmm31 with non-VEX SSE code. By using these registers (zmm16 - zmm31)
 ; rather than zmm0-xmm15 we save us from calling "vzeroupper".
 ; Source:
 ; https://stackoverflow.com/questions/43879935/avoiding-avx-sse-vex-transition-penalties/54587480#54587480
- 
+
 
 %define	EVEXR512N0	zmm31
 %define	EVEXR512N1	zmm30

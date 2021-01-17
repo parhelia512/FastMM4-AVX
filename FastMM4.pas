@@ -2,9 +2,9 @@
 
 FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS support for FastMM4)
  - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
- - Copyright (C) 2020 Maxim Masiutin. All rights reserved.
+ - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
 
-Written by Maxim Masiutin <maxim.masiutin@gmail.com>
+Written by Maxim Masiutin <maxim@masiutin.com>
 
 Version 1.04
 
@@ -13,7 +13,7 @@ This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
 
 What was added to FastMM4-AVX in comparison to the original FastMM4:
 
- - Efficient synchronization 
+ - Efficient synchronization
    - improved synchronization between the threads; proper synchronization
      techniques are used depending on context and availability, i.e. spin-wait
      loops, SwitchToThread, critical sections, etc.;
@@ -212,7 +212,7 @@ dated Jun 14, 2020. FastMM4-AVX is compiled without assembly inlines
 and without AVX instructions. This test is run on Jun 16, 2020, under
 Intel Core i7-1065G7 CPU (base frequency: 1.3 GHz, 4 cores, 8 threads).
 Compiled under Delphi 10.3 Update 3, 64-bit target. Please note that
-these are the selected scenarios where FastMM4-AVX is faster then 
+these are the selected scenarios where FastMM4-AVX is faster then
 FastMM5. In other scenarios, especially in multi-threaded with heavy
 contention, FastMM5 is faster.
 
@@ -8049,7 +8049,7 @@ like IsMultithreaded or MediumBlocksLocked}
    mov  edx, Type(TSmallBlockType)
   {$ifndef DebugAcquireLockByte}
 // use the "test, test-and-set" technique, details are in the comment section at the beginning of the file
-   cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al       
+   cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @FirstBlockLocked
   {$else}
    mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
@@ -8116,7 +8116,7 @@ like IsMultithreaded or MediumBlocksLocked}
    db   $F3, $90 // pause
    {$ifndef DebugAcquireLockByte}
 // use the "test, test-and-set" technique, details are in the comment section at the beginning of the file
-   cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al       
+   cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
    {$else}
    mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
@@ -8642,7 +8642,7 @@ asm
    mov  eax, cLockByteLocked
    mov  edx, Type(TSmallBlockType)
 // use the "test, test-and-set" technique, details are in the comment section at the beginning of the file
-   cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al       
+   cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @FirstBlockLocked
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
@@ -8683,7 +8683,7 @@ asm
   db   $F3, $90 // pause
  {$ifndef DebugAcquireLockByte}
 // use the "test, test-and-set" technique, details are in the comment section at the beginning of the file
-  cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al       
+  cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al
   je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
  {$else}
   mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked

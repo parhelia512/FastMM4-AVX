@@ -9,7 +9,7 @@ This is a fork of the Fast Memory Manager 4.992 by Pierre le Riche
 
 What was added to FastMM4-AVX in comparison to the original FastMM4:
 
- - Efficient synchronization 
+ - Efficient synchronization
    - improved synchronization between the threads; proper synchronization
      techniques are used depending on context and availability, i.e. spin-wait
      loops, SwitchToThread, critical sections, etc.;
@@ -208,7 +208,7 @@ dated Jun 14, 2020. FastMM4-AVX is compiled without assembly inlines
 and without AVX instructions. This test is run on Jun 16, 2020, under
 Intel Core i7-1065G7 CPU (base frequency: 1.3 GHz, 4 cores, 8 threads).
 Compiled under Delphi 10.3 Update 3, 64-bit target. Please note that
-these are the selected scenarios where FastMM4-AVX is faster then 
+these are the selected scenarios where FastMM4-AVX is faster then
 FastMM5. In other scenarios, especially in multi-threaded with heavy
 contention, FastMM5 is faster.
 
@@ -227,12 +227,12 @@ contention, FastMM5 is faster.
 You can find the program, used to generate the benchmark data,
 at https://github.com/maximmasiutin/FastCodeBenchmark
 
-AVX1/AVX2/AVX512/ERMS support: 
+AVX1/AVX2/AVX512/ERMS support:
  - Copyright (C) 2017-2020 Ritlabs S.R.L. All rights reserved.
- - Copyright (C) 2020 Maxim Masiutin. All rights reserved.
+ - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
 
 AVX1/AVX2/AVX512/ERMS support
-is written by Maxim Masiutin <maxim.masiutin@gmail.com>
+is written by Maxim Masiutin <maxim@masiutin.com>
 
 FastMM4-AVX is released under a dual license, and you may choose to use it
 under either the Mozilla Public License 2.0 (MPL 2.1, available from
@@ -367,16 +367,16 @@ Fast Memory Manager
   (e.g. when passing a long string or dynamic array to a DLL function), both the
   main application and the DLL must be compiled using this memory manager (with
   the required conditional defines set).
-  
+
   There are some conditional defines
-  (inside `FastMM4Options.inc`) that may be used to tweak the memory manager. To 
+  (inside `FastMM4Options.inc`) that may be used to tweak the memory manager. To
   enable support for a user mode address space greater than 2GB you will have to
   use the EditBin* tool to set the `LARGE_ADDRESS_AWARE` flag in the EXE header.
   This informs Windows x64 or Windows 32-bit (with the /3GB option set) that the
   application supports an address space larger than 2GB (up to 4GB). In Delphi 6
   and later you can also specify this flag through the compiler directive
   `{$SetPEFlags $20}`
- 
+
  *The EditBin tool ships with the MS Visual C compiler.
 ### C++ Builder:
   Refer to the instructions inside `FastMM4BCB.cpp`.
