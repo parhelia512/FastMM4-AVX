@@ -16478,7 +16478,17 @@ begin
 {$ifndef POSIX}
   HeapTotalAllocated := GetHeapStatus.TotalAllocated;
   {$ifdef FPC}
-  if HeapTotalAllocated > 300 then // allow up to 300 bytes to FreePascal until we figure out how to install our heap manager properly BEFORE any call
+{ In FreePascal, we cannot rely on HeapTotalAllocated to check whether FastMM4
+is the first unit and no memory have been allocated before, by another memory
+manager, because the initialization section of the "system.pp" unit of
+FreePascal calls the setup_arguments function to allocate memory for the
+command line buffers and store these pointers in the "argc" global variable
+(checked in versions 3.0.4 and 3.2.0), but version 3.3.1 allocates even more
+memory in the initialization of "system.pp".
+See https://bugs.freepascal.org/view.php?id=38391 for more details.
+Please double-check that the FastMM4 unit is the first unit in the units ("uses")
+list of your .lpr file (or any other main file where you define project
+units). }
   {$else}
   if HeapTotalAllocated <> 0 then
   {$endif}
