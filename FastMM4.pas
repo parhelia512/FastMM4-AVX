@@ -1437,10 +1437,6 @@ interface
 {$define FASTMM4_ALLOW_INLINES}
 {$endif}
 
-
-{$ifdef XE2AndUp}
-{$endif}
-
 {$ifdef EnableAsmCodeAlign}
   {$ifndef FPC}
     { FreePascal doesn't support .align }
@@ -1517,6 +1513,57 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 {$endif}
 
+{$ifdef FPC}
+{$ifdef 64bit}
+{$undef ASMVersion} {Assembler is not yet supportd under 64-bit FreePascal,
+because it incorrectly encodes relative values wither with +RIP or without}
+{$endif}
+{$endif}
+
+
+{$ifdef AsmVersion}
+  {$ifdef EnableMMX}
+    {$ifndef ForceMMX}
+      {$define USE_CPUID}
+    {$endif}
+  {$endif}
+
+  {$ifdef EnableERMS}
+    {$define USE_CPUID}
+  {$endif}
+
+  {$ifdef EnableAVX}
+    {$define USE_CPUID}
+  {$endif}
+
+  {$ifdef SmallBlocksLockedCriticalSection}
+    {$define USE_CPUID}
+  {$endif}
+
+  {$ifdef MediumBlocksLockedCriticalSection}
+    {$define USE_CPUID}
+  {$endif}
+
+  {$ifdef LargeBlocksLockedCriticalSection}
+    {$define USE_CPUID}
+  {$endif}
+{$endif}
+
+{$ifndef AsmVersion}
+{$undef USE_CPUID}
+{$undef EnableMMX}
+{$undef ForceMMX}
+{$undef EnableERMS}
+{$undef EnableAVX}
+{$undef EnableAVX512}
+{$undef UseCustomFixedSizeMoveRoutines}
+{$undef UseCustomVariableSizeMoveRoutines}
+{$define DisableAVX}
+{$define DisableAVX1}
+{$define DisableAVX2}
+{$define DisableAVX512}
+{$define Use_GetEnabledXStateFeatures_WindowsAPICall}
+{$endif}
 
 {-------------------------Public constants-----------------------------}
 const
@@ -1954,13 +2001,6 @@ var
 {$endif}
 {$endif}
 
-{$ifdef FPC}
-{$ifdef 64bit}
-{$undef ASMVersion} {Assembler is not yet supportd under 64-bit FreePascal,
-because it incorrectly encodes relative values wither with +RIP or without}
-{$endif}
-{$endif}
-
 implementation
 
 uses
@@ -2021,6 +2061,8 @@ function usleep(__useconds:dword):longint;cdecl;external clib name 'usleep';
 {$endif}
 {$endif}
 
+{$ifdef UseCustomFixedSizeMoveRoutines}
+
 {$ifndef ExcludeSmallGranularMoves}
 procedure Move4(const ASource; var ADest; ACount: NativeInt); forward;
 procedure Move12(const ASource; var ADest; ACount: NativeInt); forward;
@@ -2044,6 +2086,8 @@ procedure Move40(const ASource; var ADest; ACount: NativeInt); forward;
 {$endif}
 procedure Move56(const ASource; var ADest; ACount: NativeInt); forward;
 {$endif}
+
+{$endif UseCustomFixedSizeMoveRoutines}
 
 {$ifdef DetectMMOperationsAfterUninstall}
 {Invalid handlers to catch MM operations after uninstall}
@@ -2255,12 +2299,14 @@ type
   {Move procedure type}
   TMoveProc = procedure(const ASource; var ADest; ACount: NativeInt);
 
+{$ifdef USE_CPUID}
   {Registers structure (for GetCPUID)
   The registers are used solely for the CPUID instruction,
   thus they are always 32-bit, even under 64-bit mode}
   TCpuIdRegisters = record
     RegEAX, RegEBX, RegECX, RegEDX: Cardinal;
   end;
+{$endif}
 
   {The layout of a string allocation. Used to detect string leaks.}
   PStrRec = ^StrRec;
@@ -2284,6 +2330,14 @@ type
     mltExpectedLeakRegisteredByClass, mltExpectedLeakRegisteredBySize);
 {$endif}
 
+  TVolatileByte =
+  {$ifdef XE2AndUp}
+    System.ShortInt
+  {$else}
+    Byte
+  {$endif}
+  ;
+
   {---------------Small block structures-------------}
 
   {Pointer to the header of a small block pool}
@@ -2294,7 +2348,7 @@ type
   TSmallBlockType = record
     {True = Block type is locked}
 
-    SmallBlockTypeLocked: Byte; {The type is Byte for strict
+    SmallBlockTypeLocked: TVolatileByte; {The type is Byte for strict
 				type checking when the typed "@" operator
 				compiler option is ON.}
 
@@ -2757,7 +2811,7 @@ var
   MediumBlockPoolsCircularList: TMediumBlockPoolHeader;
 
   {Are medium blocks locked?}
-  MediumBlocksLocked: Byte;
+  MediumBlocksLocked: TVolatileByte;
 {$ifdef MediumBlocksLockedCriticalSection}
   MediumBlocksLockedCS: TRTLCriticalSection;
 {$endif}
@@ -2779,7 +2833,7 @@ var
   MediumBlockBins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   {-----------------Large block management------------------}
   {Are large blocks locked?}
-  LargeBlocksLocked: Byte;
+  LargeBlocksLocked: TVolatileByte;
 {$ifdef LargeBlocksLockedCriticalSection}
   LargeBlocksLockedCS: TRTLCriticalSection;
 {$endif}
@@ -2790,7 +2844,7 @@ var
 {$ifdef EnableMemoryLeakReporting}
   {The expected memory leaks}
   ExpectedMemoryLeaks: PExpectedMemoryLeaks;
-  ExpectedMemoryLeaksListLocked: Byte;
+  ExpectedMemoryLeaksListLocked: TVolatileByte;
 {$endif}
   {---------------------EventLog-------------------}
 {$ifdef _EventLog}
@@ -2889,34 +2943,6 @@ var
   {Is the MM in place a shared memory manager?}
   IsMemoryManagerOwner: Boolean;
 
-
-{$ifdef EnableMMX}
-  {$ifndef ForceMMX}
-    {$define USE_CPUID}
-  {$endif}
-{$endif}
-
-{$ifdef EnableERMS}
-  {$define USE_CPUID}
-{$endif}
-
-{$ifdef EnableAVX}
-  {$define USE_CPUID}
-{$endif}
-
-{$ifdef SmallBlocksLockedCriticalSection}
-  {$define USE_CPUID}
-{$endif}
-
-{$ifdef MediumBlocksLockedCriticalSection}
-  {$define USE_CPUID}
-{$endif}
-
-{$ifdef LargeBlocksLockedCriticalSection}
-  {$define USE_CPUID}
-{$endif}
-
-
 {$ifdef USE_CPUID}
   {See FastMMCpuFeature... constants.
   We have packe the most interesting CPUID bits in one byte for faster comparison
@@ -3006,15 +3032,14 @@ asm
   xor eax, edx
   setnz al
 end;
-{$else}
+{$else 32bit}
 
 {$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}
+// CPUID is always supported on 64-bit platforms
 begin
   Result := True;
 end;
-
-{$endif}
-
+{$endif 32bit}
 
 {Gets the CPUID}
 procedure GetCPUID(AEax, AEcx: Cardinal; var R: TCpuIdRegisters); assembler;
@@ -3048,7 +3073,7 @@ asm
   pop esi
   pop ebx
 end;
-{$else}
+{$else 32bit}
 asm
 {$ifdef AllowAsmNoframe}
   .noframe
@@ -3107,7 +3132,8 @@ For Unix (Linux), we use "System V AMD64 ABI" calling convention. }
   mov TCpuIdRegisters[r10].RegEDX, edx
   mov rbx, r9
 end;
-{$endif}
+{$endif 32bit}
+
 {$endif USE_CPUID}
 
 const
@@ -3121,11 +3147,10 @@ const
 
 {$define UseNormalLoadBeforeAcquireLock}
 
-
 {$ifdef SimplifiedInterlockedExchangeByte}
 
 {$ifdef UseNormalLoadBeforeAcquireLock}
-function AcquireLockTryNormalLoadFirst(var Target: Byte): Byte; assembler;
+function AcquireLockTryNormalLoadFirst(var Target: TVolatileByte): TVolatileByte; assembler;
 asm
 {$ifdef 32bit}
   {On entry:
@@ -3161,7 +3186,13 @@ asm
 @Exit:
 end;
 {$else}
-function InterlockedExchangeByte(var Target: Byte; const Value: Byte): Byte; assembler;
+function InterlockedExchangeByte(var Target: TVolatileByte; const Value: TVolatileByte): TVolatileByte;
+{$ifndef ASMVersion}
+begin
+  Result := Windows.InterlockedExchange8(Target, Value);
+end;
+{$else ASMVersion}
+assembler;
 asm
 {$ifdef 32bit}
   {On entry:
@@ -3170,7 +3201,7 @@ asm
   mov ecx, eax
   movzx eax, dl
   lock xchg [ecx], al
-{$else}
+{$else 32bit}
   {$ifndef unix}
   {On entry:
     rcx = Target address
@@ -3189,7 +3220,8 @@ asm
   {$endif}
 {$endif}
 end;
-{$endif}
+{$endif 32bit}
+{$endif ASMVersion}
 
 {$else !SimplifiedInterlockedExchangeByte}
 
@@ -3200,7 +3232,7 @@ of FastMM4 version 4.992. }
 {Compare [AAddress], CompareVal:
  If Equal: [AAddress] := NewVal and result = CompareVal
  If Unequal: Result := [AAddress]}
-function InterlockedCompareExchangeByte(const CompareVal, NewVal: Byte; var Target: Byte): Byte; {$ifdef fpc64bit}assembler; nostackframe;{$endif}
+function InterlockedCompareExchangeByte(const CompareVal, NewVal: TVolatileByte; var Target: TVolatileByte): TVolatileByte; {$ifdef fpc64bit}assembler; nostackframe;{$endif}
 asm
 {$ifdef 32Bit}
   {On entry:
@@ -3306,8 +3338,8 @@ end;
 {$endif}
 {$endif}
 
-
-function AcquireSpinLockByte(var Target: Byte): Boolean; assembler;
+{$ifdef ASMVersion}
+function AcquireSpinLockByte(var Target: TVolatileByte): Boolean; assembler;
 asm
 {$ifdef 64bit}
   {$ifdef AllowAsmNoframe}
@@ -3369,8 +3401,9 @@ asm
 @Finish:
 {$endif}
 end;
+{$endif ASMVersion}
 
-function AcquireLockByte(var Target: Byte): Boolean;
+function AcquireLockByte(var Target: TVolatileByte): Boolean;
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 var
   R: Byte;
@@ -3410,7 +3443,7 @@ at the beginning of the file for the discussion on releasing locks on data
 structures. You can also define the "InterlockedRelease" option in the
 FastMM4Options.inc file to get the old behaviour of the origina FastMM4. }
 
-procedure ReleaseLockByte(var Target: Byte);
+procedure ReleaseLockByte(var Target: TVolatileByte);
 
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 
@@ -3612,6 +3645,8 @@ end;
 
 {Fixed size move operations ignore the size parameter. All moves are assumed to
  be non-overlapping.}
+
+{$ifdef UseCustomFixedSizeMoveRoutines}
 
 
 {$ifdef 64bit}
@@ -4668,6 +4703,10 @@ end;
 
 {$endif ExcludeSmallGranularMoves}
 
+{$endif UseCustomFixedSizeMoveRoutines}
+
+{$ifdef ASMVersion}
+
 {Variable size move procedure: Rounds ACount up to the next multiple of 16 less
  SizeOf(Pointer). Important note: Always moves at least 16 - SizeOf(Pointer)
  bytes (the minimum small block size with 16 byte alignment), irrespective of
@@ -5162,7 +5201,6 @@ asm
 end;
 {$endif EnableERMS}
 
-
 {$ifdef Align32Bytes}
 procedure MoveX32LpUniversal(const ASource; var ADest; ACount: NativeInt);
 begin
@@ -5323,6 +5361,9 @@ asm
   {$Endif}
 {$endif}
 end;
+
+{$endif ASMVersion}
+
 
 {----------------Windows Emulation Functions for Kylix / OS X Support-----------------}
 
@@ -6115,6 +6156,7 @@ begin
 {$endif}
   begin
   {$ifdef MediumBlocksLockedCriticalSection}
+    {$ifdef USE_CPUID}
     if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
     begin
       if not AcquireLockByte(MediumBlocksLocked) then
@@ -6123,6 +6165,7 @@ begin
         AcquireSpinLockByte(MediumBlocksLocked);
       end;
     end else
+    {$endif}
     begin
       EnterCriticalSection(MediumBlocksLockedCS);
     end
@@ -6173,7 +6216,7 @@ asm
   this implementation if you would like to use the old locking mechanism of
   the original FastMM4 }
 
-  {Note: This routine is assumed to preserve all registers except eax for 32-bit Asm}
+  {Note: This routine is assumed to preserve all registers except eax for 32-bit Assembly}
 @MediumBlockLockLoop:
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to lock the medium blocks}
@@ -6229,10 +6272,12 @@ procedure UnlockMediumBlocks;
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 begin
   {$ifdef MediumBlocksLockedCriticalSection}
+  {$ifdef USE_CPUID}
   if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
   begin
     ReleaseLockByte(MediumBlocksLocked);
   end else
+  {$endif}
   begin
     LeaveCriticalSection(MediumBlocksLockedCS);
   end;
@@ -6754,6 +6799,7 @@ begin
 {$endif}
 
 {$ifdef LargeBlocksLockedCriticalSection}
+  {$ifdef USE_CPUID}
   if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
   begin
     if not AcquireLockByte(LargeBlocksLocked) then
@@ -6762,6 +6808,7 @@ begin
       AcquireSpinLockByte(LargeBlocksLocked);
     end;
   end else
+  {$endif}
   begin
     EnterCriticalSection(LargeBlocksLockedCS);
   end;
@@ -6803,10 +6850,12 @@ procedure UnlockLargeBlocks;
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 begin
   {$ifdef LargeBlocksLockedCriticalSection}
+  {$ifdef USE_CPUID}
   if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
   begin
     ReleaseLockByte(LargeBlocksLocked);
   end else
+  {$endif}
   begin
     LeaveCriticalSection(LargeBlocksLockedCS);
   end;
@@ -7149,6 +7198,11 @@ one typecast in this function to avoid using typecasts throught the
 entire FastMM4 module.}
 
 function NegCardinalMaskBit(A: Cardinal): Cardinal; assembler;
+{$ifndef ASMVersion}
+begin
+  Result := Cardinal(0-Integer(A));
+end;
+{$else}
 asm
 {$ifdef 32bit}
         neg     eax
@@ -7164,8 +7218,15 @@ asm
         neg     eax
 {$endif}
 end;
+{$endif}
 
-function NegByteMaskBit(A: Byte): Byte; assembler;
+function NegByteMaskBit(A: Byte): Byte;
+{$ifndef ASMVersion}
+begin
+  Result := Byte((0-System.Int8(A)));
+end;
+{$else}
+assembler;
 asm
 {$ifdef 32bit}
         neg     al
@@ -7181,9 +7242,15 @@ asm
         neg     al
 {$endif}
 end;
+{$endif ASMVersion}
 
-
-function NegNativeUIntMaskBit(A: NativeUInt): NativeUint; assembler;
+function NegNativeUIntMaskBit(A: NativeUInt): NativeUint;
+{$ifndef ASMVersion}
+begin
+  Result := NativeUInt(0-NativeInt(A));
+end;
+{$else}
+assembler;
 asm
 {$ifdef 32bit}
         neg     eax
@@ -7199,6 +7266,7 @@ asm
         neg     rax
 {$endif}
 end;
+{$endif ASMVersion}
 
 {$ifdef DebugReleaseLockByte}
 procedure SmallBlockUnlockError;
@@ -7223,7 +7291,24 @@ end;
 
 {$ifdef NeedFindFirstSetBit}
 {Gets the first set bit in the 32-bit number, returning the bit index}
-function FindFirstSetBit(ACardinal: Cardinal): Cardinal; {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+function FindFirstSetBit(ACardinal: Cardinal): Cardinal;
+{$ifndef ASMVersion}
+var
+  Offset : Integer;
+begin
+ Offset := 0;
+ if ACardinal <> 0 then
+ begin
+   while (ACardinal and 1) = 0 do
+   begin
+     Inc(Offset);
+     ACardinal := ACardinal shr 1;
+   end;
+ end;
+ Result := Offset;
+end;
+{$else ASMVersion}
+{$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 64Bit}
   {$ifndef unix}
@@ -7237,6 +7322,7 @@ asm
 {$endif}
   bsf eax, eax
 end;
+{$endif ASMVersion}
 {$endif NeedFindFirstSetBit}
 
 
@@ -7416,6 +7502,7 @@ begin
       end;
 
 {$ifdef SmallBlocksLockedCriticalSection}
+      {$IFDEF USE_CPUID}
       if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
       begin
         if LFailedToAcquireLock then
@@ -7423,6 +7510,7 @@ begin
           AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         end;
       end else
+      {$ENDIF}
       begin
         LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
           {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
@@ -9409,7 +9497,7 @@ begin
       {$endif}
 
 {$ifdef SmallBlocksLockedCriticalSection}
-
+      {$ifdef USE_CPUID}
       if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0 then
       begin
         if not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
@@ -9418,6 +9506,7 @@ begin
           AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         end;
       end else
+      {$endif}
       begin
         LFailedToAcquireLock := not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
@@ -16371,10 +16460,13 @@ it in bits 63-32 under 64-bit, although the xgetbv instruction only accepts
     - The 32-bit Delphi Tokyo 10.2 assembler;
     - FreePascal
   }
-    {$define XGetBvAsmSupported}
+    {$ifdef ASMVersion}
+      {$define XGetBvAsmSupported}
+    {$endif}
   {$endif}
 {$endif}
 
+{$ifdef ASMVersion}
 function GetCpuXCR(Arg: NativeUint): Int64; assembler;
 asm
  {$ifdef 64bit}
@@ -16420,6 +16512,7 @@ eax/edx, even in 64-bit mode, so we should pack eax/edx intto rax}
    {$endif}
  {$endif}
 end;
+{$endif}
 
 {Checks that no other memory manager has been installed after the RTL MM and
  that there are currently no live pointers allocated through the RTL MM.}
@@ -16775,6 +16868,7 @@ ENDQUOTE}
   {-------------Set up the small block types-------------}
 
   {$ifdef SmallBlocksLockedCriticalSection}
+  {$ifdef USE_CPUID}
   if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch = 0 then
   begin
     for LInd := Low(SmallBlockCriticalSections) to High(SmallBlockCriticalSections) do
@@ -16782,6 +16876,7 @@ ENDQUOTE}
       {$ifdef fpc}InitCriticalSection{$else}InitializeCriticalSection{$endif}(SmallBlockCriticalSections[LInd]);
     end;
   end;
+  {$endif}
   {$endif}
 
   LPreviousBlockSize := 0;
@@ -17493,6 +17588,7 @@ begin
   {$endif LargeBlocksLockedCriticalSection}
 
   {$ifdef SmallBlocksLockedCriticalSection}
+  {$ifdef USE_CPUID}
   if FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch = 0 then
   begin
     for LInd := Low(SmallBlockCriticalSections) to High(SmallBlockCriticalSections) do
@@ -17500,6 +17596,7 @@ begin
       {$ifdef fpc}DoneCriticalSection{$else}DeleteCriticalSection{$endif}(SmallBlockCriticalSections[LInd]);
     end;
   end;
+  {$endif}
 
   for LInd := Low(SmallBlockTypes) to High(SmallBlockTypes) do
   begin
@@ -17507,7 +17604,102 @@ begin
   end;
   {$endif}
 
+  end;
+end;
 
+procedure SelfTest;
+begin
+{$ifdef NeedFindFirstSetBit}
+  if
+    (FindFirstSetBit(1) <> 0) or
+    (FindFirstSetBit(2) <> 1) or
+    (FindFirstSetBit(3) <> 0) or
+    (FindFirstSetBit(4) <> 2) or
+    (FindFirstSetBit($80000000) <> 31) then
+  begin
+    ShowMessageBox('Error', 'FindFirstSetBit self-test failed');
+  end;
+{$endif}
+  if (NegByteMaskBit(0) <> 0) or
+     (NegByteMaskBit(1) <> $FF) or
+     (NegByteMaskBit(2) <> $FE) or
+     (NegByteMaskBit(3) <> $FD) or
+     (NegByteMaskBit(4) <> $FC) or
+     (NegByteMaskBit($7E) <> $82) or
+     (NegByteMaskBit($7F) <> $81) or
+     (NegByteMaskBit($80) <> $80) or
+     (NegByteMaskBit($81) <> $7F) or
+     (NegByteMaskBit($FE) <> 2) or
+     (NegByteMaskBit($FF) <> 1) then
+  begin
+    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
+  end;
+
+  if (NegCardinalMaskBit(0) <> 0) or
+     (NegCardinalMaskBit(1) <> $FFFFFFFF) or
+     (NegCardinalMaskBit(2) <> $FFFFFFFE) or
+     (NegCardinalMaskBit(3) <> $FFFFFFFD) or
+     (NegCardinalMaskBit(4) <> $FFFFFFFC) or
+     (NegCardinalMaskBit($7E) <> $FFFFFF82) or
+     (NegCardinalMaskBit($7F) <> $FFFFFF81) or
+     (NegCardinalMaskBit($80) <> $FFFFFF80) or
+     (NegCardinalMaskBit($81) <> $FFFFFF7F) or
+     (NegCardinalMaskBit($FE) <> $FFFFFF02) or
+     (NegCardinalMaskBit($FF) <> $FFFFFF01) or
+     (NegCardinalMaskBit($100) <> $FFFFFF00) or
+     (NegCardinalMaskBit($101) <> $FFFFFEFF) or
+     (NegCardinalMaskBit($7FFFFFFF) <> $80000001) or
+     (NegCardinalMaskBit($80000000) <> $80000000) or
+     (NegCardinalMaskBit($80000001) <> $7FFFFFFF) or
+     (NegCardinalMaskBit($FFFFFFFF) <> 1) or
+     (NegCardinalMaskBit($FFFFFFFE) <> 2) then
+  begin
+    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
+  end;
+
+  {$ifdef 32bit}
+  if (NegNativeUintMaskBit(0) <> 0) or
+     (NegNativeUintMaskBit(1) <> $FFFFFFFF) or
+     (NegNativeUintMaskBit(2) <> $FFFFFFFE) or
+     (NegNativeUintMaskBit(3) <> $FFFFFFFD) or
+     (NegNativeUintMaskBit(4) <> $FFFFFFFC) or
+     (NegNativeUintMaskBit($7E) <> $FFFFFF82) or
+     (NegNativeUintMaskBit($7F) <> $FFFFFF81) or
+     (NegNativeUintMaskBit($80) <> $FFFFFF80) or
+     (NegNativeUintMaskBit($81) <> $FFFFFF7F) or
+     (NegNativeUintMaskBit($FE) <> $FFFFFF02) or
+     (NegNativeUintMaskBit($FF) <> $FFFFFF01) or
+     (NegNativeUintMaskBit($100) <> $FFFFFF00) or
+     (NegNativeUintMaskBit($101) <> $FFFFFEFF) or
+     (NegNativeUintMaskBit($7FFFFFFF) <> $80000001) or
+     (NegNativeUintMaskBit($80000000) <> $80000000) or
+     (NegNativeUintMaskBit($80000001) <> $7FFFFFFF) or
+     (NegNativeUintMaskBit($FFFFFFFF) <> 1) or
+     (NegNativeUintMaskBit($FFFFFFFE) <> 2) then
+  {$else}
+  if (NegNativeUintMaskBit(0) <> 0) or
+     (NegNativeUintMaskBit(1) <> $FFFFFFFFFFFFFFFF) or
+     (NegNativeUintMaskBit(2) <> $FFFFFFFFFFFFFFFE) or
+     (NegNativeUintMaskBit(3) <> $FFFFFFFFFFFFFFFD) or
+     (NegNativeUintMaskBit(4) <> $FFFFFFFFFFFFFFFC) or
+     (NegNativeUintMaskBit($7E) <> $FFFFFFFFFFFFFF82) or
+     (NegNativeUintMaskBit($7F) <> $FFFFFFFFFFFFFF81) or
+     (NegNativeUintMaskBit($80) <> $FFFFFFFFFFFFFF80) or
+     (NegNativeUintMaskBit($81) <> $FFFFFFFFFFFFFF7F) or
+     (NegNativeUintMaskBit($FE) <> $FFFFFFFFFFFFFF02) or
+     (NegNativeUintMaskBit($FF) <> $FFFFFFFFFFFFFF01) or
+     (NegNativeUintMaskBit($100) <> $FFFFFFFFFFFFFF00) or
+     (NegNativeUintMaskBit($101) <> $FFFFFFFFFFFFFEFF) or
+     (NegNativeUintMaskBit($7FFFFFFF) <> $FFFFFFFF80000001) or
+     (NegNativeUintMaskBit($80000000) <> $FFFFFFFF80000000) or
+     (NegNativeUintMaskBit($80000001) <> $FFFFFFFF7FFFFFFF) or
+     (NegNativeUintMaskBit($FFFFFFFF) <> $FFFFFFFF00000001) or
+     (NegNativeUintMaskBit($FFFFFFFE) <> $FFFFFFFF00000002) or
+     (NegNativeUintMaskBit($FFFFFFFFFFFFFFFF) <> 1) or
+     (NegNativeUintMaskBit($FFFFFFFFFFFFFFFE) <> 2) then
+  {$endif}
+  begin
+    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
   end;
 end;
 
@@ -17518,6 +17710,7 @@ begin
     Exit;
   InitializationCodeHasRun := True;
 {$ifndef BCB}
+  SelfTest;
   {$ifdef InstallOnlyIfRunningInIDE}
   if (DebugHook <> 0) and DelphiIsRunning then
   {$endif}
