@@ -2283,6 +2283,11 @@ const
 {$endif}
 {$endif}
 
+{$ifdef Delphi4or5}
+ reInvalidOp = 217;
+{$endif}
+
+
 {-------------------------Private types----------------------------}
 type
 
@@ -7223,7 +7228,11 @@ end;
 function NegByteMaskBit(A: Byte): Byte;
 {$ifndef ASMVersion}
 begin
+{$ifdef Delphi4or5}
+  Result := Byte((0-ShortInt(A)));
+{$else}
   Result := Byte((0-System.Int8(A)));
+{$endif}
 end;
 {$else}
 assembler;
