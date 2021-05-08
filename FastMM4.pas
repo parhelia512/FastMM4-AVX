@@ -7202,12 +7202,13 @@ when using the "typed @ operator" compiler option. We are having just
 one typecast in this function to avoid using typecasts throught the
 entire FastMM4 module.}
 
-function NegCardinalMaskBit(A: Cardinal): Cardinal; assembler;
+function NegCardinalMaskBit(A: Cardinal): Cardinal;
 {$ifndef ASMVersion}
 begin
   Result := Cardinal(0-Integer(A));
 end;
 {$else}
+assembler;
 asm
 {$ifdef 32bit}
         neg     eax
@@ -17616,6 +17617,7 @@ begin
   end;
 end;
 
+{$ifdef DEBUG}
 procedure SelfTest;
 begin
 {$ifdef NeedFindFirstSetBit}
@@ -17711,6 +17713,7 @@ begin
     ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
   end;
 end;
+{$endif}
 
 procedure RunInitializationCode;
 begin
@@ -17719,7 +17722,9 @@ begin
     Exit;
   InitializationCodeHasRun := True;
 {$ifndef BCB}
+{$ifdef DEBUG}
   SelfTest;
+{$endif}
   {$ifdef InstallOnlyIfRunningInIDE}
   if (DebugHook <> 0) and DelphiIsRunning then
   {$endif}
