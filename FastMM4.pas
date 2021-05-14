@@ -1204,6 +1204,8 @@ interface
   {$undef EnableAVX}
 {$endif}
 
+{$define AssumePauseAndSwitchToThreadAvailable}
+
 {$ifdef 64bit}
   {$define AssumePauseAndSwitchToThreadAvailable}
 {$endif}
@@ -2393,8 +2395,7 @@ type
     Reserved1: Pointer;
 {$endif}
 {$ifdef 64Bit}
-    {Pad to 64 bytes for 64-bit}
-    Reserved2: Pointer;
+    FreeBlockLater: Pointer; // if we cannot free a block due to a lock, we save it here and try again later
 {$endif}
 {$ifdef UseReleaseStack}
     ReleaseStack: array [0..NumStacksPerBlock - 1] of TLFStack;
@@ -7413,12 +7414,12 @@ end;
 
 
 
-const
 {$ifndef AssumeMultiThreaded}
+const
   StateBitMultithreaded   = 1;
-{$endif}
   StateBitSmallLocked     = 2;
   StateBitMediumLocked    = 3;
+{$endif}
 
 
 {Replacement for SysGetMem}
@@ -8110,12 +8111,15 @@ asm
 
 {EBP is not used at all in the assembly routine FastGetMem - use it for the FastMM flags,
 like IsMultithreaded or MediumBlocksLocked}
-  push ebp {Save ebp}
-  push ebx {Save ebx}
-
-  xor ebp, ebp
 
 {$ifndef AssumeMultiThreaded}
+  push ebp {Save ebp}
+{$endif}
+  push ebx {Save ebx}
+
+{$ifndef AssumeMultiThreaded}
+  xor ebp, ebp
+
   {Branchless operations to avoid misprediction}
   cmp byte ptr [IsMultiThread], 0
   setnz bl
@@ -8154,7 +8158,11 @@ like IsMultithreaded or MediumBlocksLocked}
   cmp al, cLockByteAvailable
   jne SmallBlockUnlockError
   {$endif}{$endif}
+
+{$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitSmallLocked)
+{$endif}
+
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @AfterLock:
   {Find the next free block: Get the first pool with free blocks in edx}
@@ -8179,12 +8187,19 @@ like IsMultithreaded or MediumBlocksLocked}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitSmallLocked)
   jz @Exit
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
+
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Exit
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -8387,7 +8402,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
    call AcquireSpinLockMediumBlocks
    pop edx
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLockedForPool:
   {Are there any available blocks of a suitable size?}
@@ -8476,11 +8493,16 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov esi, eax
   test eax, eax
   jnz @GotMediumBlock
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlksAftrAllocNewSeqFd
+{$endif}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -8500,13 +8522,18 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Set the size and flags for this block}
   lea ecx, [edi + IsMediumBlockFlag + IsSmallBlockPoolInUseFlag]
   mov [esi - 4], ecx
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlksAftrGotMedBlk
+{$endif}
   {Unlock medium blocks}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {it destroys eax, ecx and edx, but we don't need them}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -8557,7 +8584,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   call AcquireSpinLockMediumBlocks
   pop edx
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
 
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLocked:
@@ -8615,13 +8644,18 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   call AllocNewSequentialFeedMediumPool
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlockGetDone:
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @Exit
+{$endif}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   mov ebx, eax {save eax}
   call UnlockMediumBlocks  {it also destroys ecx and edx, but we no longer need them}
   mov eax, ebx {restore eax}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit
@@ -8679,12 +8713,17 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Set the size and flags for this block}
   lea ecx, [ebx + IsMediumBlockFlag]
   mov [esi - 4], ecx
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlkAftrGotMedBlkForMedium
+{$endif}
   {Unlock medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {it also destroys ecx and edx, but we no longer need them}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
@@ -8700,7 +8739,10 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   test eax, eax
   js  @DontAllocateLargeBlock
   pop ebx
+
+{$ifndef AssumeMultiThreaded}
   pop ebp
+{$endif}
   jmp AllocateLargeBlock
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @DontAllocateLargeBlock:
@@ -8708,7 +8750,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @Exit:
   pop ebx
+{$ifndef AssumeMultiThreaded}
   pop ebp
+{$endif}
 end;
 {$else}
 {64-bit BASM implementation}
@@ -8726,16 +8770,20 @@ asm
   .pushnv rbx
   .pushnv rsi
   .pushnv rdi
+  {$ifndef AssumeMultiThreaded}
   .pushnv r12
+  {$endif}
   {$else}
   push rbx
   push rsi
   push rdi
+  {$ifndef AssumeMultiThreaded}
   push r12
   {$endif}
-  xor r12, r12
+  {$endif}
 
   {$ifndef AssumeMultiThreaded}
+  xor r12, r12
   {Get the IsMultiThread variable so long}
   lea rsi, [IsMultiThread]
   movzx esi, byte ptr [rsi] {this also clears highest bits of the rsi register}
@@ -8777,9 +8825,12 @@ asm
   cmp al, cLockByteAvailable
   jne SmallBlockUnlockError
   {$endif}{$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitSmallLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @AfterLockOnSmallBlockType:
+
   {Find the next free block: Get the first pool with free blocks in rdx}
   mov rdx, TSmallBlockType[rbx].NextPartiallyFreePool
   {Get the first free block (or the next sequential feed address if rdx = rbx)}
@@ -8802,12 +8853,17 @@ asm
   {$ifdef AsmCodeAlign}.align 16{$endif}
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitSmallLocked)
   jz @Done
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Done
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -8969,7 +9025,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLockedForPool:
   {Are there any available blocks of a suitable size?}
@@ -9064,14 +9122,20 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   test rax, rax
   jnz @GotMediumBlock
 
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @UnlockSmallBlockAndExit
+{$endif}
+
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
 (RAX, RCX, RDX, R8, R9, R10, R11),
 but we don't need them at this point}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @UnlockSmallBlockAndExit
@@ -9087,8 +9151,10 @@ but we don't need them at this point}
   lea ecx, [edi + IsMediumBlockFlag + IsSmallBlockPoolInUseFlag]
   mov [rsi - BlockHeaderSize], rcx
   {Unlock medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @NotLockedAftrGotMedBlk
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers
@@ -9096,6 +9162,9 @@ but we don't need them at this point}
 but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -9142,7 +9211,9 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLocked:
   {Get the bin number in ecx and the group number in edx}
@@ -9200,8 +9271,10 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   call AllocNewSequentialFeedMediumPool
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlockGetDone:
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
@@ -9211,6 +9284,9 @@ but we don't need them at this point - we only save RAX}
   call UnlockMediumBlocks
   mov rax, rsi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -9272,8 +9348,10 @@ but we don't need them at this point - we only save RAX}
   mov [rsi - BlockHeaderSize], rcx
   mov rax, rsi
   {Unlock medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
@@ -9282,6 +9360,9 @@ but we don't need them at this point - we only save RAX}
   call UnlockMediumBlocks
   mov rax, rsi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -9296,7 +9377,9 @@ but we don't need them at this point - we only save RAX}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @Done: {it automatically restores 4 registers from stack}
 {$ifndef AllowAsmParams}
+ {$ifndef AssumeMultiThreaded}
   pop r12
+ {$endif}
   pop rdi
   pop rsi
   pop rbx
@@ -9867,14 +9950,17 @@ asm
   mov ecx, eax
 {The EBP register is not used in FastFreeMem, so we will usee it
 for flags like IsMultiThreaded or MediumBlocksLocked}
+
+{$ifndef AssumeMultiThreaded}
   push ebp
+{$endif}
+
   {Save ebx}
   push ebx
   {Get the IsMultiThread variable}
 
-  xor ebp, ebp
-
 {$ifndef AssumeMultiThreaded}
+  xor ebp, ebp
   {Branchless code to avoid misprediction}
   cmp byte ptr [IsMultiThread], 0
   setnz bl
@@ -9916,7 +10002,9 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   cmp al, cLockByteAvailable
   jne SmallBlockUnlockError
   {$endif}{$endif}
+{$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitSmallLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @AfterLock:
   {Current state: edx = @SmallBlockPoolHeader, ecx = APointer, ebx = @SmallBlockType}
@@ -9942,12 +10030,17 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
 
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitSmallLocked)
   jz @Exit
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Exit
 
@@ -9986,12 +10079,17 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @NotSequentialFeedPool:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitSmallLocked)
   jz @DontUnlckSmlBlkAftrNotSeqFdPl
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @DontUnlckSmlBlkAftrNotSeqFdPl:
@@ -10151,7 +10249,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   call AcquireSpinLockMediumBlocks
   pop edx
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLocked:
   {Can we combine this block with the next free block?}
@@ -10189,12 +10289,17 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov edx, ebx
   {Insert into bin}
   call InsertMediumBlockIntoBin
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz  @DontUnlckMedBlksAftrBinFrMedBlk
+{$endif}
   {Unlock medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {it destroys ecx and edx, but we no longer need them}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
@@ -10244,12 +10349,17 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov edx, TMediumBlockPoolHeader[esi].NextMediumBlockPoolHeader
   mov TMediumBlockPoolHeader[eax].NextMediumBlockPoolHeader, edx
   mov TMediumBlockPoolHeader[edx].PreviousMediumBlockPoolHeader, eax
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz  @DontUnlckMedBlcksAftrEntireMedPlFre
+{$endif}
   {Unlock medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {it destroys eax, ecx and edx, but we don't need them}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -10285,12 +10395,17 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov MediumSequentialFeedBytesLeft, MediumBlockPoolSize - MediumBlockPoolHeaderSize
   {Set the last sequentially fed block}
   mov LastSequentiallyFedMediumBlock, ebx
+{$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlckMedBlksAftrMkEmptMedPlSeqFd
+{$endif}
   {Unlock medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {it destroys eax, ecx and edx, but we don't need them}
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
@@ -10306,7 +10421,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   test dl, IsFreeBlockFlag + IsMediumBlockFlag
   jnz @DontFreeLargeBlock
   pop ebx
+{$ifndef AssumeMultiThreaded}
   pop ebp
+{$endif}
   jmp FreeLargeBlock
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @DontFreeLargeBlock:
@@ -10315,7 +10432,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @Exit:
   pop ebx
+{$ifndef AssumeMultiThreaded}
   pop ebp
+{$endif}
 end;
 
 {$else}
@@ -10330,16 +10449,19 @@ asm
   .params 3
   .pushnv rbx
   .pushnv rsi
+  {$ifndef AssumeMultiThreaded}
   .pushnv r12
+  {$endif}
   {$else}
   push rbx
   push rsi
+  {$ifndef AssumeMultiThreaded}
   push r12
   {$endif}
-
-  xor r12, r12
+  {$endif}
 
 {$ifndef AssumeMultiThreaded}
+  xor r12, r12
   {Get the IsMultiThread variable so long}
   lea rsi, [IsMultiThread]
   movzx esi, byte ptr [rsi] {this also clears highest bits of the rsi register}
@@ -10381,9 +10503,29 @@ asm
   cmp al, cLockByteAvailable
   jne SmallBlockUnlockError
   {$endif}{$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitSmallLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @AfterLockOnSmallBlockType:
+   call @FreememMain
+
+   xor  eax, eax
+   lock xchg TSmallBlockType([rbx]).FreeBlockLater, rax // check whether we have one more block to free saved earlier
+   test rax, rax
+   jz   @SkipAnotherCall
+   mov  rcx, rax
+   mov  rdx, [rax - BlockHeaderSize]
+   mov  rbx, TSmallBlockPoolHeader[rdx].BlockType
+   call @FreememMain
+
+@SkipAnotherCall:
+
+
+  jmp  @FinalUnlock
+
+@FreememMain:
+
   {Current state: rdx = @SmallBlockPoolHeader, rcx = APointer, rbx = @SmallBlockType}
   {Decrement the number of blocks in use}
   sub TSmallBlockPoolHeader[rdx].BlocksInUse, 1
@@ -10404,13 +10546,21 @@ asm
   xor eax, eax
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @UnlockSmallBlockAndExit:
+  ret
+
+@FinalUnlock:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitSmallLocked)
   jz @Done
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Done
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -10448,12 +10598,17 @@ asm
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @NotSequentialFeedPool:
   {Unlock the block type}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitSmallLocked)
   jz @DontRelSmlBlkAftrNotSeqFdPl
+{$endif}
   {$ifdef DebugReleaseLockByte}
   cmp TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteLocked
   jne SmallBlockUnlockError
   {$endif}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @DontRelSmlBlkAftrNotSeqFdPl:
@@ -10490,6 +10645,14 @@ asm
 
   {$ifdef AsmCodeAlign}.align 2{$endif}
 @PrepareForSpinLoop:
+   mov rax, rcx
+   lock xchg TSmallBlockType([rbx]).FreeBlockLater, rax
+   test rax, rax
+   jz   @Done { Since we could not lock the block, save the address of the block to free and free it later }
+   mov  rcx, rax
+   mov  rdx, [rax - BlockHeaderSize]
+   mov  rbx, TSmallBlockPoolHeader[rdx].BlockType
+
    push rcx
    push rdx
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -10610,7 +10773,9 @@ in nonvolatile (callee-saved) registers like  RBX, RSI, and R12}
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLocked:
   {Can we combine this block with the next free block?}
@@ -10651,14 +10816,19 @@ in nonvolatile (callee-saved) registers like  RBX, RSI, and R12}
   {All OK}
   xor eax, eax
   {Unlock medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
 (RAX, RCX, RDX, R8, R9, R10, R11),
 but we don't need them at this point}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   xor eax, eax
@@ -10706,14 +10876,19 @@ but we don't need them at this point}
   mov TMediumBlockPoolHeader[rax].NextMediumBlockPoolHeader, rdx
   mov TMediumBlockPoolHeader[rdx].PreviousMediumBlockPoolHeader, rax
   {Unlock medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlckMedBlcksAftrEntireMedPlFre
+{$endif}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
 (RAX, RCX, RDX, R8, R9, R10, R11),
 but we don't need them at this point}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -10751,14 +10926,19 @@ but we don't need them at this point}
   {Success}
   xor eax, eax
   {Unlock medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
 (RAX, RCX, RDX, R8, R9, R10, R11),
 but we don't need them at this point}
   call UnlockMediumBlocks
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   xor eax, eax
@@ -10774,7 +10954,9 @@ but we don't need them at this point}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @Done: {automatically restores registers from stack by implicitly inserting pop instructions (rbx, rsi and r12)}
 {$ifndef AllowAsmParams}
+  {$ifndef AssumeMultiThreaded}
    pop r12
+  {$endif}
    pop rsi
    pop rbx
 {$endif}
@@ -11250,8 +11432,10 @@ end;
 {$else}
 {$ifdef 32Bit}
 assembler;
+{$ifndef AssumeMultiThreaded}
 const
   cLocalVarStackOfsMediumBlock = 4 {size of a 32-bit register} * 4 {4 saved registers to skip for a medium block};
+{$endif}
 asm
 {$ifdef fpc}
   push esi
@@ -11487,7 +11671,9 @@ asm
   call AcquireSpinLockMediumBlocks
   pop edx
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
+{$endif}
 
   {Reread the flags - they may have changed before medium blocks could be
    locked.}
@@ -11535,14 +11721,19 @@ asm
 @MediumBlockDownsizeDone:
   {Result = old pointer}
   mov eax, esi
+{$ifndef AssumeMultiThreaded}
   test byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
   jz @Exit4Reg
+{$endif}
   {Unlock the medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {this call destroys eax, ecx, edx, but we don't need them, since we are about to exit}
   {Result = old pointer}
   mov eax, esi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit4Reg
@@ -11609,7 +11800,9 @@ asm
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {Re-read the info for this block (since it may have changed before the medium
    blocks could be locked)}
   mov ebx, ExtractMediumAndLargeFlagsMask
@@ -11685,21 +11878,28 @@ asm
   {Result = old pointer}
   mov eax, esi
 
+{$ifndef AssumeMultiThreaded}
   test byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
   jz @Exit4Reg
+{$endif}
   {Unlock the medium blocks}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   call UnlockMediumBlocks {this call destroys eax, ecx, edx, but we don't need them now since we are about to exit}
   {Result = old pointer}
   mov eax, esi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit4Reg
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @NextMediumBlockChanged:
+{$ifndef AssumeMultiThreaded}
   test byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlksAftrNxtMedBlkChg
+{$endif}
   {The next medium block changed while the medium blocks were being locked}
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
   push ecx
@@ -11708,6 +11908,9 @@ asm
   pop edx
   pop ecx
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -11825,21 +12028,24 @@ asm
   .pushnv rbx
   .pushnv rsi
   .pushnv rdi
+  {$ifndef AssumeMultiThreaded}
   .pushnv r12
+  {$endif}
   .pushnv r14
   .pushnv r15
   {$else}
   push rbx
   push rsi
   push rdi
+  {$ifndef AssumeMultiThreaded}
   push r12
+  {$endif}
   push r14
   push r15
   {$endif}
 
-  xor     r12, r12
-
 {$ifndef AssumeMultiThreaded}
+  xor r12, r12
   {Get the IsMultiThread variable so long}
   lea rsi, [IsMultiThread]
   movzx esi, byte ptr [rsi] {this also clears highest bits of the rsi register}
@@ -12040,7 +12246,9 @@ asm
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {Reread the flags - they may have changed before medium blocks could be
    locked.}
   mov rbx, ExtractMediumAndLargeFlagsMask
@@ -12088,8 +12296,10 @@ asm
   {Result = old pointer}
   mov rax, rsi
   {Unlock the medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
@@ -12099,6 +12309,9 @@ but we don't need them at this point, since we are about to exit}
   {Result = old pointer}
   mov rax, rsi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -12169,7 +12382,9 @@ but we don't need them at this point, since we are about to exit}
 {$else}
   call AcquireSpinLockMediumBlocks
 {$endif}
+{$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
+{$endif}
   {Re-read the info for this block (since it may have changed before the medium
    blocks could be locked)}
   mov rbx, ExtractMediumAndLargeFlagsMask
@@ -12244,8 +12459,10 @@ but we don't need them at this point, since we are about to exit}
   {Result = old pointer}
   mov rax, rsi
   {Unlock the medium blocks}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @Done
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call destroys most of the volatile (caller-saved) registers,
@@ -12255,6 +12472,9 @@ but we don't need them at this point, since we are about to exit}
   {Result = old pointer}
   mov rax, rsi
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -12262,8 +12482,10 @@ but we don't need them at this point, since we are about to exit}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @NextMediumBlockChanged:
   {The next medium block changed while the medium blocks were being locked}
+{$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlksAftrNxtMedBlkChg
+{$endif}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {The call to "UnlockMediumBlocks" destroys most of the volatile (caller-saved)
@@ -12275,6 +12497,9 @@ so ew save RCX and RDX}
   mov rcx, rbx // restore rcx
   mov rdx, r15 // restore rdx
 {$else}
+{$ifdef InterlockedRelease}
+  lock
+{$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
@@ -12353,7 +12578,9 @@ so ew save RCX and RDX}
 {$ifndef AllowAsmParams}
   pop r15
   pop r14
+  {$ifndef AssumeMultiThreaded}
   pop r12
+  {$endif}
   pop rdi
   pop rsi
   pop rbx
@@ -17718,6 +17945,23 @@ begin
 end;
 {$endif}
 
+{$ifdef 64bit}
+procedure FreeSaved;
+var
+  LInd: Integer;
+  p: Pointer;
+begin
+  for LInd := 0 to High(SmallBlockTypes) do
+  begin
+    p := InterlockedExchangePointer(SmallBlockTypes[LInd].FreeBlockLater, nil);
+    if p <> nil then
+    begin
+      FreeMem(p);
+    end;
+  end;
+end;
+{$endif}
+
 procedure FinalizeMemoryManager;
 {$ifdef SmallBlocksLockedCriticalSection}
 var
@@ -17730,6 +17974,9 @@ begin
 {$ifdef UseReleaseStack}
   DestroyCleanupThread;
   CleanupReleaseStacks;
+{$endif}
+{$ifdef 64bit}
+  FreeSaved;
 {$endif}
 {$ifndef NeverUninstall}
     {Uninstall FastMM}
