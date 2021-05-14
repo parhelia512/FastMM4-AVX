@@ -71,8 +71,16 @@ Set the default options for FastMM here.
  applications. Enable if you are using multi-threaded third-party tools that do
  not properly set the IsMultiThread variable. Also set this option if you are
  going to share this memory manager between a single threaded application and a
- multi-threaded DLL.}
-{.$define AssumeMultiThreaded}
+ multi-threaded DLL. Since the primary goal of FastMM4-AVX is improvement in
+ multi-threaded applications, this option is enabled by default}
+{$define AssumeMultiThreaded}
+
+{Enable to always assume that the CPU supports "pause" instruction and Windows
+supports SwitchToThread() API call. This option has no effect for 64-bit target,
+since it is always assumed under 64-bit that both "pause" and SwitchToThread()
+are supported}
+
+{.$define AssumePauseAndSwitchToThreadAvailable}
 
 {Enable this option to not call Sleep when a thread contention occurs. This
  option will improve performance if the ratio of the number of active threads
