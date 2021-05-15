@@ -22,7 +22,6 @@ Set the default options for FastMM here.
 
  If you enable AVX, then the alignment will always be 32 bytes.}
 
-
 {.$define Align16Bytes}
 {.$define Align32Bytes}
 
@@ -31,7 +30,9 @@ Set the default options for FastMM here.
  These routines are much faster than the Borland RTL move procedure since they
  are optimized to move a fixed number of bytes. This option may be used
  together with the FastMove library for even better performance.}
+
 {$define UseCustomFixedSizeMoveRoutines}
+
 
 {Enable this option to use an optimized procedure for moving a memory block of
  an arbitrary size. Disable this option when using the Fastcode move
@@ -39,7 +40,9 @@ Set the default options for FastMM here.
  application to gain from faster move routines, not just the memory manager. It
  is thus recommended that you use the Fastcode move library in conjunction with
  this memory manager and disable this option.}
+
 {$define UseCustomVariableSizeMoveRoutines}
+
 
 {Enable this option to only install FastMM as the memory manager when the
  application is running inside the Delphi IDE. This is useful when you want
@@ -48,13 +51,17 @@ Set the default options for FastMM here.
  the application is not being run inside the IDE debugger, then the default
  Delphi memory manager will be used (which, since Delphi 2006, is FastMM
  without FullDebugMode.}
+
 {.$define InstallOnlyIfRunningInIDE}
+
 
 {Due to QC#14070 ("Delphi IDE attempts to free memory after the shutdown code
  of borlndmm.dll has been called"), FastMM cannot be uninstalled safely when
  used inside a replacement borlndmm.dll for the IDE. Setting this option will
  circumvent this problem by never uninstalling the memory manager.}
+
 {.$define NeverUninstall}
+
 
 {Set this option when you use runtime packages in this application or library.
  This will automatically set the "AssumeMultiThreaded" option. Note that you
@@ -62,7 +69,10 @@ Set the default options for FastMM here.
  freed - failure to do so will result in a large leak report followed by a lot
  of A/Vs. (See the FAQ for more detail.) You may have to combine this option
  with the NeverUninstall option.}
+
 {.$define UseRuntimePackages}
+
+
 
 {-----------------------Concurrency Management Options------------------------}
 
@@ -72,15 +82,31 @@ Set the default options for FastMM here.
  not properly set the IsMultiThread variable. Also set this option if you are
  going to share this memory manager between a single threaded application and a
  multi-threaded DLL. Since the primary goal of FastMM4-AVX is improvement in
- multi-threaded applications, this option is enabled by default}
+ multi-threaded applications, this option is enabled by default. However, if you
+ know for sure that your application is Single-Threaded, undefine this to improve
+ performance - this will save yo from unnecessary locking! }
+
 {$define AssumeMultiThreaded}
+
 
 {Enable to always assume that the CPU supports "pause" instruction and Windows
 supports SwitchToThread() API call. This option has no effect for 64-bit target,
 since it is always assumed under 64-bit that both "pause" and SwitchToThread()
-are supported}
+are supported. So it is only relevant for 32-bit platforms with very old CPUs.
+If you are sure that "pause" and SwithchToThread() are always avaialbe, the
+program may skip checking and improve speed. However, if you define
+"DisablePauseAndSwitchToThread", then "AssumePauseAndSwitchToThreadAvailable"
+will be automatically undefined}
 
 {.$define AssumePauseAndSwitchToThreadAvailable}
+
+
+{ If you disable "pause" and SwitchToThread() by defining the
+DisablePauseAndSwitchToThread, then EnterCriticalSection/LeaveCriticalSection
+calls will be used instead }
+
+{.$define DisablePauseAndSwitchToThread}
+
 
 {Enable this option to not call Sleep when a thread contention occurs. This
  option will improve performance if the ratio of the number of active threads
@@ -99,6 +125,7 @@ This option has no effect when SmallBlocksLockedCriticalSection/
 MediumBlocksLockedCriticalSection/LargeBlocksLockedCriticalSection is enabled}
 
 {.$define NeverSleepOnThreadContention}
+
 
 {Set this option to call SwitchToThread instead of sitting in a "busy waiting"
  loop when a thread contention occurs. This is used in conjunction with the
@@ -119,6 +146,7 @@ MediumBlocksLockedCriticalSection/LargeBlocksLockedCriticalSection is enabled}
 
 {.$define UseSwitchToThread}
 
+
 {This option uses a simpler instruction to acquire a lock: "lock xchg",
 instead of "lock cmpxchg" used in earlier versions of FastMM4: there is
 actually no reason to use "cmpxchg", because  the simple instruction - "xchg" -
@@ -127,23 +155,24 @@ costs in terms of CPU cycles as "cmpxghg", it is just simper way to do the
 lock that we need, and, according to the Occam's razor principle, simple things
 are better. If you wish to restore old functionality of FastMM4 version 4.992,
 disable this option }
+
 {$define SimplifiedInterlockedExchangeByte}
 
 
 {These 3 options make FastMM4-AVX use a new approach to waiting for a lock:
-CriticalSections or "pause"-based spin-wait loops instead of Sleep() or 
-SwitchToThread(). 
-Using Sleep(0) or SwitchToThread() while waiting for a lock is a default 
-approach in the original version of FastMM. 
+CriticalSections or "pause"-based spin-wait loops instead of Sleep() or
+SwitchToThread().
+Using Sleep(0) or SwitchToThread() while waiting for a lock is a default
+approach in the original version of FastMM.
 With the new approach, the Sleep() will never be called, and SwitchToThread()
-may only be called after 5000 cycles of "pause"-based spin-wait loop. 
-Testing has shown that the new approach provides significant gain in 
+may only be called after 5000 cycles of "pause"-based spin-wait loop.
+Testing has shown that the new approach provides significant gain in
 multi-threaded scenarios, especially in situations when the number of threads
-working with the memory manager is the same or higher than the number of 
-physical cores. 
-Critical Sections or "pause"-based spin-wait loops implemented as 
-"test, test-and-set" are much more CPU-friendly and have definitely lower 
-latency than Sleep() or SwitchToThread(). 
+working with the memory manager is the same or higher than the number of
+physical cores.
+Critical Sections or "pause"-based spin-wait loops implemented as
+"test, test-and-set" are much more CPU-friendly and have definitely lower
+latency than Sleep() or SwitchToThread().
 
 When these options are enabled, FastMM4-AVX checks:
  - whether the CPU supports SSE2 and thus the "pause" instruction, and
@@ -154,23 +183,23 @@ SwitchToThread() instead of critical sections; If a CPU doesn't have the
 "pause" instrcution or Windows doesn't have the SwitchToThread() API
 function, it will use EnterCriticalSection/LeaveCriticalSection.
 
-If you wound not define the 3 options below, you will get the locking 
+If you wound not define the 3 options below, you will get the locking
 mechanism from the original FastMM4}
 
 {$define SmallBlocksLockedCriticalSection}
 {$define MediumBlocksLockedCriticalSection}
 {$define LargeBlocksLockedCriticalSection}
 
-{$define CheckPauseAndSwitchToThreadForAsmVersion}
 
 
 { Use this option if you need that releasing a lock on data structure,
-i.e. writing to a synchronization variable, to use bus-locking memory store 
+i.e. writing to a synchronization variable, to use bus-locking memory store
 (lock xchg) rather than just the normal memory store (mov).
 Using bus-locking memory store to release a lock on data structure is
-an old approach of the original FastMM4, and is not recommended 
-for FastMM4-AVX. Look for "using normal memory store" in the comment section 
+an old approach of the original FastMM4, and is not recommended
+for FastMM4-AVX. Look for "using normal memory store" in the comment section
 at the beginning of the main .pas file for the discussion }
+
 {.$define InterlockedRelease}
 
 
@@ -179,40 +208,54 @@ at the beginning of the main .pas file for the discussion }
 {Enable this option to suppress the generation of debug info for the
  FastMM4.pas unit. This will prevent the integrated debugger from stepping into
  the memory manager code.}
-{.$define NoDebugInfo}
+
+ {.$define NoDebugInfo}
+
 
 {Enable this option to suppress the display of all message dialogs. This is
  useful in service applications that should not be interrupted.}
-{.$define NoMessageBoxes}
+
+ {.$define NoMessageBoxes}
+
 
 {Set this option to use the Windows API OutputDebugString procedure to output
  debug strings on startup/shutdown and when errors occur.}
-{.$define UseOutputDebugString}
+
+ {.$define UseOutputDebugString}
+
 
 {Set this option to use the assembly language version which is faster than the
  pascal version. Disable only for debugging purposes. Setting the
  CheckHeapForCorruption option automatically disables this option.}
+
 {$define ASMVersion}
+
 
 {Allow using ".align" assembler directive. FreePascal doesn't support ".align"
  Delphi incorrectly encodes conditional jumps (used 6-byte instructions instead
  of just 2 bytes. So don't use it for Borland (Embarcadero) Delphi neither
  for FreePascal}
+
 {.$define EnableAsmCodeAlign}
+
 
 {FastMM always catches attempts to free the same memory block twice, however it
  can also check for corruption of the memory heap (typically due to the user
  program overwriting the bounds of allocated memory). These checks are
  expensive, and this option should thus only be used for debugging purposes.
  If this option is set then the ASMVersion option is automatically disabled.}
+
 {.$define CheckHeapForCorruption}
+
 
 {Enable this option to catch attempts to perform MM operations after FastMM has
  been uninstalled. With this option set when FastMM is uninstalled it will not
  install the previous MM, but instead a dummy MM handler that throws an error
  if any MM operation is attempted. This will catch attempts to use the MM
  after FastMM has been uninstalled.}
+
 {$define DetectMMOperationsAfterUninstall}
+
 
 {Set the following option to do extensive checking of all memory blocks. All
  blocks are padded with both a header and trailer that are used to verify the
@@ -224,24 +267,32 @@ at the beginning of the main .pas file for the discussion }
  Very important: If you enable this option your application will require the
  FastMM_FullDebugMode.dll library. If this library is not available you will
  get an error on startup.}
+
 {.$define FullDebugMode}
+
 
   {Set this option to perform "raw" stack traces, i.e. check all entries on the
    stack for valid return addresses. Note that this is significantly slower
    than using the stack frame tracing method, but is usually more complete. Has
    no effect unless FullDebugMode is enabled}
+
   {.$define RawStackTraces}
+
 
   {Set this option to check for user code that uses an interface of a freed
    object. Note that this will disable the checking of blocks modified after
    being freed (the two are not compatible). This option has no effect if
    FullDebugMode is not also enabled.}
+
   {.$define CatchUseOfFreedInterfaces}
+
 
   {Set this option to log all errors to a text file in the same folder as the
    application. Memory errors (with the FullDebugMode option set) will be
    appended to the log file. Has no effect if "FullDebugMode" is not set.}
+
   {$define LogErrorsToFile}
+
 
   {Set this option to log all memory leaks to a text file in the same folder as
    the application. Memory leak reports (with the FullDebugMode option set)
@@ -250,17 +301,23 @@ at the beginning of the main .pas file for the discussion }
    logged, even if they are "expected" leaks registered through
    AddExpectedMemoryLeaks. Expected leaks registered by pointer may be excluded
    through the HideExpectedLeaksRegisteredByPointer option.}
+
   {$define LogMemoryLeakDetailToFile}
+
 
   {Deletes the error log file on startup. No effect if LogErrorsToFile is not
    also set.}
+
   {.$define ClearLogFileOnStartup}
+
 
   {Loads the FASTMM_FullDebugMode.dll dynamically. If the DLL cannot be found
    then stack traces will not be available. Note that this may cause problems
    due to a changed DLL unload order when sharing the memory manager. Use with
    care.}
+
   {.$define LoadDebugDLLDynamically}
+
 
     {.$define DoNotInstallIfDLLMissing}
     {If the FastMM_FullDebugMode.dll file is not available then FastMM will not
@@ -270,17 +327,22 @@ at the beginning of the main .pas file for the discussion }
     {.$define RestrictDebugDLLLoadPath}
     {Allow to load debug dll only from host module directory.}
 
+
   {FastMM usually allocates large blocks from the topmost available address and
    medium and small blocks from the lowest available address (This reduces
    fragmentation somewhat). With this option set all blocks are always
    allocated from the highest available address. If the process has a >2GB
    address space and contains bad pointer arithmetic code, this option should
    help to catch those errors sooner.}
+
   {$define AlwaysAllocateTopDown}
+
 
   {Disables the logging of memory dumps together with the other detail for
    memory errors.}
+
   {.$define DisableLoggingOfMemoryDumps}
+
 
   {If FastMM encounters a problem with a memory block inside the FullDebugMode
    FreeMem handler then an "invalid pointer operation" exception will usually
@@ -289,13 +351,18 @@ at the beginning of the main .pas file for the discussion }
    lost. With this option set FastMM will ignore errors inside FreeMem when an
    exception is being handled, thus allowing the original exception to
    propagate.}
+
   {$define SuppressFreeMemErrorsInsideException}
+
 
   {Adds support for notification of memory manager events in FullDebugMode.
    With this define set, the application may assign the OnDebugGetMemFinish,
    OnDebugFreeMemStart, etc. callbacks in order to be notified when the
    particular memory manager event occurs.}
+
   {.$define FullDebugModeCallBacks}
+
+
 
 {---------------------------Memory Leak Reporting-----------------------------}
 
@@ -306,28 +373,37 @@ Combine it with the two options below for further fine-tuning.}
 {$define EnableMemoryLeakReporting}
 {$endif}
 
+
   {Set this option to suppress the display and logging of expected memory leaks
    that were registered by pointer. Leaks registered by size or class are often
    ambiguous, so these expected leaks are always logged to file (in
    FullDebugMode with the LogMemoryLeakDetailToFile option set) and are never
    hidden from the leak display if there are more leaks than are expected.}
+
   {$define HideExpectedLeaksRegisteredByPointer}
+
 
   {Set this option to require the presence of the Delphi IDE to report memory
    leaks. This option has no effect if the option "EnableMemoryLeakReporting"
    is not also set.}
+
   {.$define RequireIDEPresenceForLeakReporting}
+
 
   {Set this option to require the program to be run inside the IDE debugger to
    report memory leaks. This option has no effect if the option
    "EnableMemoryLeakReporting" is not also set. Note that this option does not
    work with libraries, only EXE projects.}
+
   {$define RequireDebuggerPresenceForLeakReporting}
+
 
   {Set this option to require the presence of debug info ($D+ option) in the
    compiled unit to perform memory leak checking. This option has no effect if
    the option "EnableMemoryLeakReporting" is not also set.}
+
   {.$define RequireDebugInfoForLeakReporting}
+
 
   {Set this option to enable manual control of the memory leak report. When
    this option is set the ReportMemoryLeaksOnShutdown variable (default = false)
@@ -335,18 +411,24 @@ Combine it with the two options below for further fine-tuning.}
    this option is selected then both the variable must be set to true and the
    other leak checking options must be applicable for the leak checking to be
    done.}
+
   {.$define ManualLeakReportingControl}
+
 
   {Set this option to disable the display of the hint below the memory leak
    message.}
+
   {.$define HideMemoryLeakHintMessage}
+
 
   {Set this option to use QualifiedClassName equivalent instead of ClassName
    equivalent during memory leak reporting.
    This is useful for duplicate class names (like EConversionError, which is in
    units Data.DBXJSONReflect, REST.JsonReflect and System.ConvUtils,
    or TClipboard being in Vcl.Clibprd and WinAPI.ApplicationModel.DataTransfer }
+
   {$define EnableMemoryLeakReportingUsesQualifiedClassName}
+
 
 {--------------------------Instruction Set Options----------------------------}
 
@@ -355,7 +437,9 @@ Combine it with the two options below for further fine-tuning.}
  AMD K5, Pentium I and earlier CPUs. MMX is currently only used in the variable
  size move routines, so if UseCustomVariableSizeMoveRoutines is not set then
  this option has no effect.}
+
 {.$define EnableMMX}
+
 
 {$ifndef DontForceMMX}
 
@@ -382,9 +466,11 @@ Combine it with the two options below for further fine-tuning.}
   and will not be exposed. This option properly handles AVX-SSE transitions to not
   incur the transition penalties, only calls vzeroupper under AVX1, but not under
   AVX2, since it slows down subsequent SSE code under Kaby Lake}
+
   {$define EnableAVX}
 
 {$endif}
+
 
 {$ifdef EnableAVX}
   {If AVX is enabled, you can optionally disable one or more
@@ -432,6 +518,7 @@ Combine it with the two options below for further fine-tuning.}
   {Set this option (EnableERMS) to enable Enhanced Rep Movsb/Stosb CPU feature,
   which improves speed of medium and large block memory copy
   under 32-bit or 64-bit modes}
+
   {$define EnableERMS}
 
 {$endif}
@@ -450,7 +537,9 @@ Combine it with the two options below for further fine-tuning.}
  files are initialized before the main application, so the main application may
  well end up sharing a statically loaded DLL's memory manager and not the other
  way around. }
+
 {.$define ShareMM}
+
 
   {Allow sharing of the memory manager by a DLL with other DLLs (or the main
    application if this is a statically loaded DLL) that were also compiled with
@@ -463,18 +552,25 @@ Combine it with the two options below for further fine-tuning.}
    if DLLs are statically linked then they will be initialized before the main
    application and then the DLL will in fact share its MM with the main
    application. This option has no effect unless ShareMM is also set.}
+
   {.$define ShareMMIfLibrary}
+
 
 {Define this to attempt to share the MM of the main application or other loaded
  DLLs in the same process that were compiled with ShareMM set. When sharing a
  memory manager, memory leaks caused by the sharer will not be freed
  automatically. Take into account that statically linked DLLs are initialized
  before the main application, so set the sharing options accordingly.}
+
 {.$define AttemptToUseSharedMM}
+
 
 {Define this to enable backward compatibility for the memory manager sharing
  mechanism used by Delphi 2006 and 2007, as well as older FastMM versions.}
-{$define EnableBackwardCompatibleMMSharing}
+
+ {$define EnableBackwardCompatibleMMSharing}
+
+
 
 {-----------------------Security Options------------------------}
 
@@ -484,13 +580,18 @@ Combine it with the two options below for further fine-tuning.}
  necessary. If you're paranoid about this kind of thing, enable this option to
  clear all freed memory before returning it to the operating system. Note that
  this incurs a noticeable performance hit.}
+
 {.$define ClearMemoryBeforeReturningToOS}
+
 
 {With this option enabled freed memory will immediately be cleared inside the
  FreeMem routine. This incurs a big performance hit, but may be worthwhile for
  additional peace of mind when working with highly sensitive data. This option
  supersedes the ClearMemoryBeforeReturningToOS option.}
+
 {.$define AlwaysClearFreedMemory}
+
+
 
 {----------------------------Lock Contention Logging--------------------------}
 
@@ -500,9 +601,11 @@ Combine it with the two options below for further fine-tuning.}
  (locations with highest occurrence) will be logged to the _MemoryManager_EventLog.txt
  file.
  This options works with FullDebugMode or without it, but requires
- FastMM_FullDebugMode.dll to be present in both cases.
-}
+ FastMM_FullDebugMode.dll to be present in both cases.}
+
 {.$define LogLockContention}
+
+
 
 {--------------------------------Option Grouping------------------------------}
 
@@ -511,14 +614,18 @@ Combine it with the two options below for further fine-tuning.}
  FullDebugMode if the application is being debugged inside the Delphi IDE.
  Otherwise the default Delphi memory manager will be used (which is equivalent
  to the non-FullDebugMode FastMM since Delphi 2006.)}
+
 {.$define FullDebugModeInIDE}
+
 
 {Combines the FullDebugMode, LoadDebugDLLDynamically and
  DoNotInstallIfDLLMissing options. Consequently FastMM will only be installed
  (In FullDebugMode) when the FastMM_FullDebugMode.dll file is available. This
  is useful when the same executable will be distributed for both debugging as
  well as deployment.}
+
 {.$define FullDebugModeWhenDLLAvailable}
+
 
 {Group the options you use for release and debug versions below}
 {$ifdef Release}

@@ -1204,14 +1204,29 @@ interface
   {$undef EnableAVX}
 {$endif}
 
-{$define AssumePauseAndSwitchToThreadAvailable}
+{ The assembly implementation of FastGetmem and FastFreemem will check whether
+ "pause" and SwitchToThread() are available, otherwisw will jump to pascal versions
+ of FastGetmem and FastFreemem. However, if we assume that "pause" and SwitchToThread()
+ are available (AssumePauseAndSwitchToThreadAvailable), we would not do any check,
+ i.e., undefine CheckPauseAndSwitchToThreadForAsmVersion}
 
-{$ifdef 64bit}
-  {$define AssumePauseAndSwitchToThreadAvailable}
+{$ifdef ASMVersion}
+{$define CheckPauseAndSwitchToThreadForAsmVersion}
 {$endif}
 
-{$ifdef AssumePauseAndSwitchToThreadAvailable}
+{$ifdef DisablePauseAndSwitchToThread}
+  {$undef ASMVersion}
+  {$undef AssumePauseAndSwitchToThreadAvailable}
   {$undef CheckPauseAndSwitchToThreadForAsmVersion}
+  {$undef FastGetMemNeedAssemblerCode}
+  {$define FastGetMemNeedPascalCode}
+{$else}
+  {$ifdef 64bit}
+    {$define AssumePauseAndSwitchToThreadAvailable}
+  {$endif}
+  {$ifdef AssumePauseAndSwitchToThreadAvailable}
+    {$undef CheckPauseAndSwitchToThreadForAsmVersion}
+  {$endif}
 {$endif}
 
 {$ifdef 64bit}
@@ -1498,16 +1513,17 @@ of just one option: "Boolean short-circuit evaluation".}
   {$undef CheckPauseAndSwitchToThreadForAsmVersion}
 {$endif}
 
-
-{$ifdef ASMVersion}
-  {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
-    {$define FastGetMemNeedPascalCode}
-    {$define FastGetMemNeedAssemblerCode}
+{$ifndef DisablePauseAndSwitchToThread}
+  {$ifdef ASMVersion}
+    {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
+      {$define FastGetMemNeedPascalCode}
+      {$define FastGetMemNeedAssemblerCode}
+    {$else}
+      {$define FastGetMemNeedAssemblerCode}
+    {$endif}
   {$else}
-    {$define FastGetMemNeedAssemblerCode}
+     {$define FastGetMemNeedPascalCode}
   {$endif}
-{$else}
-   {$define FastGetMemNeedPascalCode}
 {$endif}
 
 {$ifndef FastGetMemNeedAssemblerCode}
@@ -2602,11 +2618,12 @@ const
   FastMMCpuFeatureERMS                          = UnsignedBit shl 4;
 {$endif}
 
+{$ifndef DisablePauseAndSwitchToThread}
 {$ifndef AssumePauseAndSwitchToThreadAvailable}
   {CPU supports "pause" instruction and Windows supports SwitchToThread() API call}
   FastMMCpuFeaturePauseAndSwitch                = UnsignedBit shl 5;
 {$endif}
-
+{$endif}
 
 
 {-------------------------Private variables----------------------------}
@@ -3323,7 +3340,7 @@ end;
 {$endif}
 
 
-
+{$ifndef DisablePauseAndSwitchToThread}
 {$ifdef KYLIX}
 procedure SwitchToThreadIfSupported;
 begin
@@ -3350,7 +3367,9 @@ begin
 end;
 {$endif}
 {$endif}
+{$endif DisablePauseAndSwitchToThread}
 
+{$ifndef DisablePauseAndSwitchToThread}
 {$ifdef ASMVersion}
 procedure AcquireSpinLockMediumBlocks; assembler;
 asm
@@ -3477,6 +3496,8 @@ asm
 {$endif}
 end;
 {$endif ASMVersion}
+{$endif DisablePauseAndSwitchToThread}
+
 
 function AcquireLockByte(var Target: TVolatileByte): Boolean;
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
@@ -6209,6 +6230,10 @@ end;
 {$endif}
 
 
+{$ifdef DisablePauseAndSwitchToThread}
+const
+  CpuFeaturePauseAndSwitch = False;
+{$else}
 {$ifdef AssumePauseAndSwitchToThreadAvailable}
 const
   CpuFeaturePauseAndSwitch = True;
@@ -6222,6 +6247,9 @@ begin
   {$endif}
 end;
 {$endif}
+{$endif DisablePauseAndSwitchToThread}
+
+
 
 {Locks the medium blocks. Note that the 32-bit assembler version is assumed to
  preserve all registers except eax.}
@@ -6246,6 +6274,7 @@ begin
 {$endif}
   begin
   {$ifdef MediumBlocksLockedCriticalSection}
+    {$ifndef DisablePauseAndSwitchToThread}
     if CpuFeaturePauseAndSwitch then
     begin
       if not AcquireLockByte(MediumBlocksLocked) then
@@ -6254,6 +6283,7 @@ begin
         AcquireSpinLockByte(MediumBlocksLocked);
       end;
     end else
+    {$endif}
     begin
       EnterCriticalSection(MediumBlocksLockedCS);
     end
@@ -6885,6 +6915,7 @@ begin
 {$endif}
 
 {$ifdef LargeBlocksLockedCriticalSection}
+  {$ifndef DisablePauseAndSwitchToThread}
   if CpuFeaturePauseAndSwitch then
   begin
     if not AcquireLockByte(LargeBlocksLocked) then
@@ -6893,6 +6924,7 @@ begin
       AcquireSpinLockByte(LargeBlocksLocked);
     end;
   end else
+  {$endif}
   begin
     EnterCriticalSection(LargeBlocksLockedCS);
   end;
@@ -7371,6 +7403,10 @@ end;
 {$define NeedFindFirstSetBit}
 {$endif}
 
+{$ifdef FastGetMemNeedPascalCode}
+{$define NeedFindFirstSetBit}
+{$endif}
+
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 {$define NeedFindFirstSetBit}
 {$endif}
@@ -7589,6 +7625,7 @@ begin
       end;
 
 {$ifdef SmallBlocksLockedCriticalSection}
+      {$ifndef DisablePauseAndSwitchToThread}
       if CpuFeaturePauseAndSwitch then
       begin
         if LFailedToAcquireLock then
@@ -7596,6 +7633,7 @@ begin
           AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         end;
       end else
+      {$endif}
       begin
         LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
           {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
@@ -9723,6 +9761,7 @@ begin
       {$endif}
 
 {$ifdef SmallBlocksLockedCriticalSection}
+      {$ifndef DisablePauseAndSwitchToThread}
       if CpuFeaturePauseAndSwitch then
       begin
         if not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
@@ -9731,6 +9770,7 @@ begin
           AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         end;
       end else
+      {$endif}
       begin
         LFailedToAcquireLock := not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked);
         LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
@@ -17113,8 +17153,10 @@ var
 {$endif}
 begin
 
+{$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
   FSwitchToThread := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+{$endif}
 {$endif}
 
 {$ifdef FullDebugMode}
@@ -17222,14 +17264,16 @@ This is because the operating system would not save the registers and the states
         because PAUSE and other instructions like PREFETCHh, MOVNTI, etc.
         work regardless of the CR0 values}
 
+        {$ifndef DisablePauseAndSwitchToThread}
         {$ifndef POSIX}
         if Assigned(FSwitchToThread) then
         {$endif}
         begin
           {$ifndef AssumePauseAndSwitchToThreadAvailable}
           FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeaturePauseAndSwitch;
-          {$endif}
+          {$endif DisablePauseAndSwitchToThread}
         end;
+        {$endif}
       end;
 
 {$ifdef EnableMMX}
