@@ -9993,18 +9993,18 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
 
 {$ifndef AssumeMultiThreaded}
   push ebp
+  xor ebp, ebp
 {$endif}
 
   {Save ebx}
   push ebx
+  xor ebx, ebx
   {Get the IsMultiThread variable}
 
 {$ifndef AssumeMultiThreaded}
-  xor ebp, ebp
   {Branchless code to avoid misprediction}
   cmp byte ptr [IsMultiThread], 0
   setnz bl
-  movzx ebx, bl
   shl ebx, StateBitMultithreaded
   or ebp, ebx
 {$endif}
@@ -10087,16 +10087,18 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @SmallPoolWasFull:
   {Insert this as the first partially free pool for the block size}
-  mov ecx, TSmallBlockType[ebx].NextPartiallyFreePool
+  mov eax, TSmallBlockType[ebx].NextPartiallyFreePool
   mov TSmallBlockPoolHeader[edx].PreviousPartiallyFreePool, ebx
-  mov TSmallBlockPoolHeader[edx].NextPartiallyFreePool, ecx
-  mov TSmallBlockPoolHeader[ecx].PreviousPartiallyFreePool, edx
+  mov TSmallBlockPoolHeader[edx].NextPartiallyFreePool, eax
+  mov TSmallBlockPoolHeader[eax].PreviousPartiallyFreePool, edx
   mov TSmallBlockType[ebx].NextPartiallyFreePool, edx
   {All ok}
   xor eax, eax
   jmp @UnlockSmallBlockAndExit
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @PoolIsNowEmpty:
+  { mark the current block as released to prevent further call to FreeMem}
+  mov dword ptr [ecx-4], IsFreeBlockFlag
   {Was this pool actually in the linked list of pools with space? If not, it
    can only be the sequential feed pool (it is the only pool that may contain
    only one block, i.e. other blocks have not been split off yet)}
