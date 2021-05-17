@@ -1303,8 +1303,8 @@ interface
   {$undef RequireIDEPresenceForLeakReporting}
   {$undef UseOutputDebugString}
   {$ifdef PIC}
-    {BASM version does not support position independent code}
-    {$undef ASMVersion}
+    {BASM version does not support position independent code}kj kj
+    {$undef ASMVersion}ffff
   {$endif}
   {$ifndef FPC}
     {$define MACOS_OR_KYLIX}
@@ -1358,7 +1358,7 @@ interface
 
 {Only the Pascal version supports extended heap corruption checking.}
 {$ifdef CheckHeapForCorruption}
-  {$undef ASMVersion}
+  {$undef ASMVersion}ffff
 {$endif}
 
 {For BASM bits that are not implemented in 64-bit.}
@@ -1508,11 +1508,13 @@ of just one option: "Boolean short-circuit evaluation".}
 
 {$ifdef PasCodeAlign}
   {$IFNDEF FPC}
-  {$CODEALIGN 32}
+  {$CODEALIGN 16}
   {$ENDIF}
+  {$IFDEF FPC
   {$CODEALIGN PROC=32}
   {$CODEALIGN JUMP=16}
   {$CODEALIGN LOOP=8}
+  {$ENDIF}
 {$endif}
 
 {$ifndef AsmVersion
@@ -1585,6 +1587,10 @@ of just one option: "Boolean short-circuit evaluation".}
     {$define FastFreememNeedAssemberCode}
     {$define FastReallocMemNeedAssemberCode}
   {$endif}
+{$endif}
+
+{$ifdef AsmVersion}
+{$define AuxAsmRoutines}
 {$endif}
 
 {$ifndef AsmVersion}
@@ -17096,7 +17102,10 @@ units). }
   {$ifndef NoMessageBoxes}
     AppendStringToModuleName(MemoryAllocatedTitle, LErrorMessageTitle, Length(MemoryAllocatedTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
     {$IFDEF FPC}
-    ShowMessageBox('In FreePascal, we cannot rely on HeapTotalAllocated to check whether FastMM4 is the first unit and no memory has been allocated before, by another memory manager, because the initialization section of the "system.pp" unit of FreePascal calls the setup_arguments function to allocate memory for the command line buffers and store these pointers in the "argc" global variable (checked in versions 3.0.4 and 3.2.0). However, the version 3.3.1 allocates even more memory in the initialization of "system.pp". See https://bugs.freepascal.org/view.php?id=38391 for more details. Please double-check that the FastMM4 unit is the first unit in the units ("uses") list of your .lpr file (or any other main file where you define project units). You can recompile FastMM4-AVX with the IgnoreMemoryAllocatedBefore conditional define, but, in this case, there will be no check whether the FastMM4 is the first unit in the units section, and if it is not the first, you will get errors. Please consider supporting the https://bugs.freepascal.org/view.php?id=38391 and/or improving FreePascal to fix the bug registered under that URL.', LErrorMessageTitle);    {$ELSE}
+    ShowMessageBox('In FreePascal, we cannot rely on HeapTotalAllocated to check '+
+    'whether FastMM4 is the first unit and no memory has been allocated before, '+
+    'by another memory manager, because the initialization section of the "system.pp" '+
+    'unit of FreePascal calls the setup_arguments function to allocate memory for the command line buffers and store these pointers in the "argc" global variable (checked in versions 3.0.4 and 3.2.0). However, the version 3.3.1 allocates even more memory in the initialization of "system.pp". See https://bugs.freepascal.org/view.php?id=38391 for more details. Please double-check that the FastMM4 unit is the first unit in the units ("uses") list of your .lpr file (or any other main file where you define project units). You can recompile FastMM4-AVX with the IgnoreMemoryAllocatedBefore conditional define, but, in this case, there will be no check whether the FastMM4 is the first unit in the units section, and if it is not the first, you will get errors. Please consider supporting the https://bugs.freepascal.org/view.php?id=38391 and/or improving FreePascal to fix the bug registered under that URL.', LErrorMessageTitle);    {$ELSE}
     ShowMessageBox(MemoryAllocatedMsg, LErrorMessageTitle);
     {$ENDIF}
   {$endif}
@@ -18017,7 +18026,7 @@ begin
     {$IFDEF FPC}
     p := PVOID(InterlockedExchange64(LONGLONG(SmallBlockTypes[LInd].FreeBlockLater), LONGLONG(0)));
     {$ELSE}
-    p := InterlockedExchange64(SmallBlockTypes[LInd].FreeBlockLater, nil);
+    p := InterlockedExchangePointer(SmallBlockTypes[LInd].FreeBlockLater, nil);
     {$ENDIF}
     if p <> nil then
     begin
