@@ -1463,9 +1463,10 @@ interface
 {$ifdef EnableAsmCodeAlign}
   {$ifndef FPC}
     { FreePascal doesn't support .align }
-    { Delphi incorrectly encodes conditional jumps (used 6-byte instructions instead of just 2 bytes}
+    { Delphi 64-bit or 32-bit incorrectly encodes conditional jumps in Assembly}
+    { (used 6-byte instructions instead of just 2 bytes) }
     { So don't use it for Borland (Embarcadero) Delphi neither for FreePascal}
-    {$define AsmCodeAlign}
+      {$define AsmCodeAlign}
   {$endif}
 {$endif EnableAsmCodeAlign}
 
@@ -1506,7 +1507,12 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 
 {$ifdef PasCodeAlign}
-  {$CODEALIGN 16}
+  {$IFNDEF FPC}
+  {$CODEALIGN 32}
+  {$ENDIF}
+  {$CODEALIGN PROC=32}
+  {$CODEALIGN JUMP=16}
+  {$CODEALIGN LOOP=8}
 {$endif}
 
 {$ifndef AsmVersion
@@ -1538,12 +1544,13 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 
 {$ifdef FPC}
-{$ifdef 64bit}
-{$undef ASMVersion} {Assembler is not yet supportd under 64-bit FreePascal,
-because it incorrectly encodes relative values wither with +RIP or without}
+  {$ifdef 64bit}
+    {$undef ASMVersion}
+    {Assembler is not yet supportd under 64-bit FreePascal,
+    because it incorrectly encodes relative values wither with +RIP or without}
+    {$define AuxAsmRoutines}
+  {$endif}
 {$endif}
-{$endif}
-
 
 {$ifdef AsmVersion}
   {$ifdef EnableMMX}
@@ -1570,6 +1577,13 @@ because it incorrectly encodes relative values wither with +RIP or without}
 
   {$ifdef LargeBlocksLockedCriticalSection}
     {$define USE_CPUID}
+  {$endif}
+{$endif}
+
+{$ifdef ASMVersion}
+  {$ifndef FPC}
+    {$define FastFreememNeedAssemberCode}
+    {$define FastReallocMemNeedAssemberCode}
   {$endif}
 {$endif}
 
@@ -2268,11 +2282,7 @@ const
   AdditionalSleepTime = 1;
 {$endif}
   {Hexadecimal characters}
-  HexTable: array[0..15] of AnsiChar = ('0', '1', '2', '3', '4', '5', '6', '7',
-    '8', '9', 'A', 'B', 'C', 'D', 'E', 'F');
-  {Copyright message - not used anywhere in the code}
-  CCopyright = 'FastMM4 (c) 2004 - 2011 Pierre le Riche / Professional Software Development';
-  Copyright: array[0..Length(CCopyright)-1] of AnsiChar = CCopyright;
+  HexTable: array[0..15] of AnsiChar = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F');
 {$ifdef FullDebugMode}
   {Virtual Method Called On Freed Object Errors}
   StandardVirtualMethodNames: array[1 + vmtParent div SizeOf(Pointer) .. vmtDestroy div SizeOf(Pointer)] of PAnsiChar = (
@@ -3370,7 +3380,7 @@ end;
 {$endif DisablePauseAndSwitchToThread}
 
 {$ifndef DisablePauseAndSwitchToThread}
-{$ifdef ASMVersion}
+{$ifdef AuxAsmRoutines}
 procedure AcquireSpinLockMediumBlocks; assembler;
 asm
 {$ifdef 64bit}
@@ -6785,10 +6795,12 @@ asm
   .params 2
   {$endif}
   xor eax, eax
-  cmp MediumSequentialFeedBytesLeft, eax
+  lea r8, MediumSequentialFeedBytesLeft
+  cmp [r8], eax
   je @Done
   {Get a pointer to the last sequentially allocated medium block}
-  mov rax, LastSequentiallyFedMediumBlock
+  lea r8, LastSequentiallyFedMediumBlock
+  mov rax, [r8]
   {Is the block that was last fed sequentially free?}
   test byte ptr [rax - BlockHeaderSize], IsFreeBlockFlag
   jnz @LastBlockFedIsFree
@@ -9690,7 +9702,7 @@ end;
 
 {Replacement for SysFreeMem}
 function FastFreeMem(APointer: Pointer): {$ifdef fpc}{$ifdef CPU64}PtrUInt{$else}NativeUInt{$endif}{$else}Integer{$endif};
-{$ifndef ASMVersion}
+{$ifndef FastFreememNeedAssemberCode}
 const
   CFastFreeMemReturnValueError = {$ifdef fpc}NativeUInt(-1){$else}-1{$endif};
 var
@@ -9973,7 +9985,7 @@ begin
     end;
   end;
 end;
-{$else}
+{$else FastFreememNeedAssemberCode}
 {$ifdef 32Bit}
 assembler;
 asm
@@ -10479,7 +10491,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
 end;
 
-{$else}
+{$else 32Bit}
 
 {---------------64-bit BASM FastFreeMem---------------}
 assembler;
@@ -11004,13 +11016,13 @@ but we don't need them at this point}
    pop rbx
 {$endif}
 end;
-{$endif}
-{$endif}
+{$endif 32Bit}
+{$endif FastFreememNeedAssemberCode}
 
 {$ifndef FullDebugMode}
 {Replacement for SysReallocMem}
 function FastReallocMem({$ifdef fpc}var {$endif}APointer: Pointer; ANewSize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif}{$endif}): Pointer;
-{$ifndef ASMVersion}
+{$ifndef FastReallocMemNeedAssemberCode}
 
   {Upsizes a large block in-place. The following variables are assumed correct:
     LBlockFlags, LOldAvailableSize, LPNextBlock, LNextBlockSizeAndFlags,
@@ -11472,7 +11484,7 @@ begin
   end;
 {$endif}
 end;
-{$else}
+{$else FastReallocMemNeedAssemberCode}
 {$ifdef 32Bit}
 assembler;
 {$ifndef AssumeMultiThreaded}
@@ -12631,7 +12643,7 @@ so ew save RCX and RDX}
 end;
 {$endif}
 {$endif}
-{$endif}
+{$endif FastReallocMemNeedAssemberCode}
 
 {Allocates a block and fills it with zeroes}
 function FastAllocMem(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc} NativeUInt{$else}Cardinal{$endif}{$endif}): Pointer;
@@ -17063,7 +17075,6 @@ begin
 
 {$ifndef POSIX}
   HeapTotalAllocated := GetHeapStatus.TotalAllocated;
-  {$ifdef FPC}
 { In FreePascal, we cannot rely on HeapTotalAllocated to check whether FastMM4
 is the first unit and no memory have been allocated before, by another memory
 manager, because the initialization section of the "system.pp" unit of
@@ -17075,9 +17086,8 @@ See https://bugs.freepascal.org/view.php?id=38391 for more details.
 Please double-check that the FastMM4 unit is the first unit in the units ("uses")
 list of your .lpr file (or any other main file where you define project
 units). }
-  {$else}
+{$ifndef IgnoreMemoryAllocatedBefore}
   if HeapTotalAllocated <> 0 then
-  {$endif}
   begin
     {Memory has been already been allocated with the RTL MM}
 {$ifdef UseOutputDebugString}
@@ -17085,10 +17095,14 @@ units). }
 {$endif}
   {$ifndef NoMessageBoxes}
     AppendStringToModuleName(MemoryAllocatedTitle, LErrorMessageTitle, Length(MemoryAllocatedTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
+    {$IFDEF FPC}
+    ShowMessageBox('In FreePascal, we cannot rely on HeapTotalAllocated to check whether FastMM4 is the first unit and no memory has been allocated before, by another memory manager, because the initialization section of the "system.pp" unit of FreePascal calls the setup_arguments function to allocate memory for the command line buffers and store these pointers in the "argc" global variable (checked in versions 3.0.4 and 3.2.0). However, the version 3.3.1 allocates even more memory in the initialization of "system.pp". See https://bugs.freepascal.org/view.php?id=38391 for more details. Please double-check that the FastMM4 unit is the first unit in the units ("uses") list of your .lpr file (or any other main file where you define project units). You can recompile FastMM4-AVX with the IgnoreMemoryAllocatedBefore conditional define, but, in this case, there will be no check whether the FastMM4 is the first unit in the units section, and if it is not the first, you will get errors. Please consider supporting the https://bugs.freepascal.org/view.php?id=38391 and/or improving FreePascal to fix the bug registered under that URL.', LErrorMessageTitle);    {$ELSE}
     ShowMessageBox(MemoryAllocatedMsg, LErrorMessageTitle);
+    {$ENDIF}
   {$endif}
     Exit;
   end;
+{$endif}
 {$endif}
   {All OK}
   Result := True;
@@ -18000,7 +18014,11 @@ var
 begin
   for LInd := 0 to High(SmallBlockTypes) do
   begin
-    p := InterlockedExchangePointer(SmallBlockTypes[LInd].FreeBlockLater, nil);
+    {$IFDEF FPC}
+    p := PVOID(InterlockedExchange64(LONGLONG(SmallBlockTypes[LInd].FreeBlockLater), LONGLONG(0)));
+    {$ELSE}
+    p := InterlockedExchange64(SmallBlockTypes[LInd].FreeBlockLater, nil);
+    {$ENDIF}
     if p <> nil then
     begin
       FreeMem(p);

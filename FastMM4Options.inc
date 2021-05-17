@@ -8,7 +8,7 @@ Set the default options for FastMM here.
 
 {---------------------------Miscellaneous Options-----------------------------}
 
-{Enable Align16Bytes define to align all blocks on 16 byte boundaries,
+{Enable Align16Bytes define to align all data blocks on 16 byte boundaries,
  or enable Align32Bytes define to align all blocks on 32 byte boundaries,
  so aligned SSE instructions can be used safely.
 
@@ -224,19 +224,27 @@ at the beginning of the main .pas file for the discussion }
  {.$define UseOutputDebugString}
 
 
-{Set this option to use the assembly language version which is faster than the
- pascal version. Disable only for debugging purposes. Setting the
- CheckHeapForCorruption option automatically disables this option.}
+{Set this option to use the assembly language version of GetMem and FreeMem
+ which is faster than the pascal version. Disable only for debugging purposes.
+ Setting the CheckHeapForCorruption option automatically disables this option.}
 
 {$define ASMVersion}
 
 
-{Allow using ".align" assembler directive. FreePascal doesn't support ".align"
- Delphi incorrectly encodes conditional jumps (used 6-byte instructions instead
- of just 2 bytes. So don't use it for Borland (Embarcadero) Delphi neither
- for FreePascal}
+{Allow using ".align" assembler directive for the 32-bit or 64-bit Delphi
+ assembly.
+ FreePascal doesn't support ".align".
+ Delphi 32-bit or 64-bit compiler incorrectly encodes conditional jumps
+ (used 6-byte instructions instead of just 2 bytes, so it prevents branch
+ predicions. So don't use it for Embarcadero (former Borland) 32-bit or 64-bit
+ Delphi neither for FreePascal}
 
 {.$define EnableAsmCodeAlign}
+
+
+{Allow pascal code alignment}
+
+{$define PasCodeAlign}
 
 
 {FastMM always catches attempts to free the same memory block twice, however it
