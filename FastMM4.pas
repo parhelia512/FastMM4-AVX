@@ -6,7 +6,7 @@ FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS support for Fas
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.04
+Version 1.05
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -254,6 +254,17 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
+- 1.05 (18 May 2021) - improved speed of releasing memory blocks on higher thred
+    contention. It is also possible to compile FastMM4-AVX without a single
+    inline assebly code. Renamed some conditional defines to be self-explaining.
+    Rewritten some comments to be meaningful. Made it compile under FreePascal
+    for Linux 64-bit and 32-bit. Also made it compile under FreePascal for
+    Windows 32-bit and 64-bit. Memory move functions for 152, 184 and 216 bytes
+    were incorrect Linux. Move216AVX1 and Move216AVX2 Linux implementation had
+    invalid opcodes. Added support for the GetFPCHeapStatus(). Optimizations on
+    signle-threaded performance. If you define DisablePauseAndSwitchToThread,
+    it will use EnterCriticalSection/LeaveCriticalSectin. An attempt to free a
+    memory block twice was not cought under 32-bit Delphi.
 - 1.04 (O6 October 2020) - improved use of AVX-512 instructions to avoid turbo
     clock reduction and SSE/AVX transition penalty; made explicit order of
     parameters for GetCPUID to avoid calling convention ambiguity that could
@@ -1358,7 +1369,7 @@ interface
 
 {Only the Pascal version supports extended heap corruption checking.}
 {$ifdef CheckHeapForCorruption}
-  {$undef ASMVersion}ffff
+  {$undef ASMVersion}
 {$endif}
 
 {For BASM bits that are not implemented in 64-bit.}
@@ -1582,6 +1593,14 @@ of just one option: "Boolean short-circuit evaluation".}
   {$endif}
 {$endif}
 
+{$ifndef DisablePauseAndSwitchToThread}
+{$ifndef AssumePauseAndSwitchToThreadAvailable}
+{$ifdef USE_CPUID}
+{$define AuxAsmRoutines}
+{$endif}
+{$endif}
+{$endif}
+
 {$ifdef ASMVersion}
   {$ifndef FPC}
     {$define FastFreememNeedAssemberCode}
@@ -1608,6 +1627,15 @@ of just one option: "Boolean short-circuit evaluation".}
 {$define DisableAVX512}
 {$define Use_GetEnabledXStateFeatures_WindowsAPICall}
 {$endif}
+
+{$ifdef 32bit}
+{$define AuxAsmRoutines}
+{$endif}
+
+{$ifdef 64bit}
+{$define AuxAsmRoutines}
+{$endif}
+
 
 {-------------------------Public constants-----------------------------}
 const
@@ -6801,12 +6829,10 @@ asm
   .params 2
   {$endif}
   xor eax, eax
-  lea r8, MediumSequentialFeedBytesLeft
-  cmp [r8], eax
+  cmp MediumSequentialFeedBytesLeft, eax
   je @Done
   {Get a pointer to the last sequentially allocated medium block}
-  lea r8, LastSequentiallyFedMediumBlock
-  mov rax, [r8]
+  mov rax, LastSequentiallyFedMediumBlock
   {Is the block that was last fed sequentially free?}
   test byte ptr [rax - BlockHeaderSize], IsFreeBlockFlag
   jnz @LastBlockFedIsFree
@@ -7332,7 +7358,7 @@ entire FastMM4 module.}
 function NegCardinalMaskBit(A: Cardinal): Cardinal;
 {$ifndef ASMVersion}
 begin
-  Result := Cardinal(0-Integer(A));
+  Result := Cardinal(0-Int64(A));
 end;
 {$else}
 assembler;
@@ -7384,7 +7410,7 @@ end;
 function NegNativeUIntMaskBit(A: NativeUInt): NativeUint;
 {$ifndef ASMVersion}
 begin
-  Result := NativeUInt(0-NativeInt(A));
+  Result := NativeUInt(0-Int64(A));
 end;
 {$else}
 assembler;
@@ -8255,7 +8281,6 @@ like IsMultithreaded or MediumBlocksLocked}
 {$ifdef InterlockedRelease}
   lock
 {$endif}
-
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Exit
   {$ifdef AsmCodeAlign}.align 8{$endif}
@@ -10571,7 +10596,10 @@ asm
 @AfterLockOnSmallBlockType:
    call @FreememMain
 
+@MaybeAnothreFree:
    xor  eax, eax
+   cmp  TSmallBlockType([rbx]).FreeBlockLater, rax // do normal load first
+   jz   @SkipAnotherCall
    lock xchg TSmallBlockType([rbx]).FreeBlockLater, rax // check whether we have one more block to free saved earlier
    test rax, rax
    jz   @SkipAnotherCall
@@ -10579,6 +10607,7 @@ asm
    mov  rdx, [rax - BlockHeaderSize]
    mov  rbx, TSmallBlockPoolHeader[rdx].BlockType
    call @FreememMain
+   jmp  @MaybeAnothreFree
 
 @SkipAnotherCall:
 
@@ -18190,14 +18219,19 @@ begin
      (NegCardinalMaskBit($FE) <> $FFFFFF02) or
      (NegCardinalMaskBit($FF) <> $FFFFFF01) or
      (NegCardinalMaskBit($100) <> $FFFFFF00) or
-     (NegCardinalMaskBit($101) <> $FFFFFEFF) or
+     (NegCardinalMaskBit($101) <> $FFFFFEFF) then
+  begin
+    ShowMessageBox('Error', 'NegCardinalMaskBit (lower value) self-test failed');
+  end;
+
+  if
      (NegCardinalMaskBit($7FFFFFFF) <> $80000001) or
      (NegCardinalMaskBit($80000000) <> $80000000) or
      (NegCardinalMaskBit($80000001) <> $7FFFFFFF) or
      (NegCardinalMaskBit($FFFFFFFF) <> 1) or
      (NegCardinalMaskBit($FFFFFFFE) <> 2) then
   begin
-    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
+    ShowMessageBox('Error', 'NegCardinalMaskBit (higher value) self-test failed');
   end;
 
   {$ifdef 32bit}
@@ -18213,13 +18247,20 @@ begin
      (NegNativeUintMaskBit($FE) <> $FFFFFF02) or
      (NegNativeUintMaskBit($FF) <> $FFFFFF01) or
      (NegNativeUintMaskBit($100) <> $FFFFFF00) or
-     (NegNativeUintMaskBit($101) <> $FFFFFEFF) or
+     (NegNativeUintMaskBit($101) <> $FFFFFEFF) then
+  begin
+    ShowMessageBox('Error', 'NegNativeUintMaskBit (lower value) self-test failed');
+  end;
+  if
      (NegNativeUintMaskBit($7FFFFFFF) <> $80000001) or
      (NegNativeUintMaskBit($80000000) <> $80000000) or
      (NegNativeUintMaskBit($80000001) <> $7FFFFFFF) or
      (NegNativeUintMaskBit($FFFFFFFF) <> 1) or
      (NegNativeUintMaskBit($FFFFFFFE) <> 2) then
-  {$else}
+  begin
+    ShowMessageBox('Error', 'NegNativeUintMaskBit (higher value) self-test failed');
+  end;
+  {$else 32bit}
   if (NegNativeUintMaskBit(0) <> 0) or
      (NegNativeUintMaskBit(1) <> $FFFFFFFFFFFFFFFF) or
      (NegNativeUintMaskBit(2) <> $FFFFFFFFFFFFFFFE) or
@@ -18232,7 +18273,11 @@ begin
      (NegNativeUintMaskBit($FE) <> $FFFFFFFFFFFFFF02) or
      (NegNativeUintMaskBit($FF) <> $FFFFFFFFFFFFFF01) or
      (NegNativeUintMaskBit($100) <> $FFFFFFFFFFFFFF00) or
-     (NegNativeUintMaskBit($101) <> $FFFFFFFFFFFFFEFF) or
+     (NegNativeUintMaskBit($101) <> $FFFFFFFFFFFFFEFF) then
+  begin
+    ShowMessageBox('Error', 'NegNativeUintMaskBit (lower value) self-test failed');
+  end;
+  if
      (NegNativeUintMaskBit($7FFFFFFF) <> $FFFFFFFF80000001) or
      (NegNativeUintMaskBit($80000000) <> $FFFFFFFF80000000) or
      (NegNativeUintMaskBit($80000001) <> $FFFFFFFF7FFFFFFF) or
@@ -18240,10 +18285,10 @@ begin
      (NegNativeUintMaskBit($FFFFFFFE) <> $FFFFFFFF00000002) or
      (NegNativeUintMaskBit($FFFFFFFFFFFFFFFF) <> 1) or
      (NegNativeUintMaskBit($FFFFFFFFFFFFFFFE) <> 2) then
-  {$endif}
   begin
-    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
+      ShowMessageBox('Error', 'NegNativeUintMaskBit (higher value) self-test failed');
   end;
+  {$endif 32bit}
 end;
 {$endif}
 
@@ -18282,7 +18327,7 @@ begin
 end;
 
 initialization
-  RunInitializationCode;
+   RunInitializationCode;
 
 finalization
 {$ifndef PatchBCBTerminate}
