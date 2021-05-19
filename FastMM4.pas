@@ -4858,22 +4858,6 @@ asm
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
 
-  cmp ecx, 18
-  jb @MoveWithErmsNoAVX
-
-  add ecx, 15
-  and ecx, not 15
-  sub ecx, 16
-  call @MoveWithErmsNoAVX
-  mov ecx, [eax]
-  mov [edx], ecx
-  mov ecx, [eax+4]
-  mov [edx+4], ecx
-  mov ecx, [eax+8]
-  mov [edx+8], ecx
-  ret
-
-@MoveWithErmsNoAVX:
   xchg    esi, eax // save esi
   xchg    edi, edx // save edi
   cld
@@ -5339,19 +5323,10 @@ asm
 {$ifdef 32Bit}
 // Under 32-bit Windows or Unix, the call passes first parametr in EAX, second in EDX, third in ECX
 
-  add     ecx, 15
-  and     ecx, not 15
-  sub     ecx, 16
   xchg    esi, eax // save esi
   xchg    edi, edx // save edi
   cld
   rep     movsb
-  mov     ecx, [esi]
-  mov     [edi], ecx
-  mov     ecx, [esi+4]
-  mov     [edi+4], ecx
-  mov     ecx, [esi+8]
-  mov     [edi+8], ecx
   xchg    esi, eax // restore esi
   xchg    edi, edx // restore edi
 
@@ -5367,30 +5342,16 @@ asm
   mov    rsi, rcx
   mov    rdi, rdx
   mov    rcx, r8
-  add    rcx, 15
-  and    rcx, not 15
-  sub    rcx, 16
   cld
   rep    movsb
-  mov    rcx, [rsi]
-  mov    [rdi], rcx
-  mov    ecx, [rsi+8]
-  mov    [rdi+8], ecx
   mov    rsi, r9
   mov    rdi, r10
   {$else}
 // Under Unix 64 the first 3 arguments are passed in RDI, RSI, RDX
   xchg   rsi, rdi
   mov    rcx, rdx
-  add    rcx, 15
-  and    rcx, not 15
-  sub    rcx, 16
   cld
   rep    movsb
-  mov    rcx, [rsi]
-  mov    [rdi], rcx
-  mov    ecx, [rsi+8]
-  mov    [rdi+8], ecx
   {$endif}
 {$endif}
 end;
@@ -5463,19 +5424,7 @@ asm
 {$ifdef 32Bit}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-  cmp ecx, 12
-  jb @MoveWithErmsNoAVX
 
-  add ecx, 7
-  and ecx, not 7
-  sub ecx, 8
-  call @MoveWithErmsNoAVX
-  mov ecx, [eax]
-  mov [edx], ecx
-  ret
-
-
-@MoveWithErmsNoAVX:
   xchg    esi, eax // save esi
   xchg    edi, edx // save edi
   cld
