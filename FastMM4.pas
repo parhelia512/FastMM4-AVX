@@ -4847,6 +4847,7 @@ end;
 
 {$ifdef ASMVersion}
 
+
 {Variable size move procedure: Rounds ACount up to the next multiple of 16 less
  SizeOf(Pointer). Important note: Always moves at least 16 - SizeOf(Pointer)
  bytes (the minimum small block size with 16 byte alignment), irrespective of
@@ -4854,6 +4855,34 @@ end;
 procedure MoveX16LP(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
+  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  jz @NoERMS
+
+  cmp ecx, 18
+  jb @MoveWithErmsNoAVX
+
+  add ecx, 15
+  and ecx, not 15
+  sub ecx, 16
+  call @MoveWithErmsNoAVX
+  mov ecx, [eax]
+  mov [edx], ecx
+  mov ecx, [eax+4]
+  mov [edx+4], ecx
+  mov ecx, [eax+8]
+  mov [edx+8], ecx
+  ret
+
+@MoveWithErmsNoAVX:
+  xchg    esi, eax // save esi
+  xchg    edi, edx // save edi
+  cld
+  rep     movsb
+  xchg    esi, eax // restore esi
+  xchg    edi, edx // restore edi
+  ret
+
+@NoERMS:
   {Make the counter negative based: The last 12 bytes are moved separately}
   sub ecx, 12
   add eax, ecx
@@ -5305,16 +5334,28 @@ p. 3.7.7 (Enhanced REP MOVSB and STOSB operation (ERMSB)).
 We first check the corresponding bit in the CPUID, and, if it is supported,
 call this routine.}
 
-procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveWithErmsNoAVX_Align16(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
 // Under 32-bit Windows or Unix, the call passes first parametr in EAX, second in EDX, third in ECX
+
+  add     ecx, 15
+  and     ecx, not 15
+  sub     ecx, 16
   xchg    esi, eax // save esi
   xchg    edi, edx // save edi
   cld
   rep     movsb
+  mov     ecx, [esi]
+  mov     [edi], ecx
+  mov     ecx, [esi+4]
+  mov     [edi+4], ecx
+  mov     ecx, [esi+8]
+  mov     [edi+8], ecx
   xchg    esi, eax // restore esi
   xchg    edi, edx // restore edi
+
+
 {$else}
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -5326,16 +5367,30 @@ asm
   mov    rsi, rcx
   mov    rdi, rdx
   mov    rcx, r8
+  add    rcx, 15
+  and    rcx, not 15
+  sub    rcx, 16
   cld
   rep    movsb
+  mov    rcx, [rsi]
+  mov    [rdi], rcx
+  mov    ecx, [rsi+8]
+  mov    [rdi+8], ecx
   mov    rsi, r9
   mov    rdi, r10
   {$else}
 // Under Unix 64 the first 3 arguments are passed in RDI, RSI, RDX
   xchg   rsi, rdi
   mov    rcx, rdx
+  add    rcx, 15
+  and    rcx, not 15
+  sub    rcx, 16
   cld
   rep    movsb
+  mov    rcx, [rsi]
+  mov    [rdi], rcx
+  mov    ecx, [rsi+8]
+  mov    [rdi+8], ecx
   {$endif}
 {$endif}
 end;
@@ -5386,7 +5441,7 @@ begin
     {$ifdef EnableERMS}
     if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
     begin
-      MoveWithErmsNoAVX(ASource, ADest, ACount)
+      MoveWithErmsNoAVX_Align16(ASource, ADest, ACount)
     end else
     {$endif}
     begin
@@ -5406,6 +5461,31 @@ end;
 procedure MoveX8LP(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
+  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  jz @NoERMS
+  cmp ecx, 12
+  jb @MoveWithErmsNoAVX
+
+  add ecx, 7
+  and ecx, not 7
+  sub ecx, 8
+  call @MoveWithErmsNoAVX
+  mov ecx, [eax]
+  mov [edx], ecx
+  ret
+
+
+@MoveWithErmsNoAVX:
+  xchg    esi, eax // save esi
+  xchg    edi, edx // save edi
+  cld
+  rep     movsb
+  xchg    esi, eax // restore esi
+  xchg    edi, edx // restore edi
+  ret
+
+
+@NoERMS:
   {Make the counter negative based: The last 4 bytes are moved separately}
   sub ecx, 4
   {4 bytes or less? -> Use the Move4 routine.}
@@ -10028,7 +10108,7 @@ asm
 @PointerNotNil:
   {$endif}
   {Get the block header in edx}
-  mov edx, [eax - 4]
+  mov edx, [eax - BlockHeaderSize]
   {Save the pointer in ecx}
   mov ecx, eax
 {The EBP register is not used in FastFreeMem, so we will usee it
@@ -10103,7 +10183,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   mov TSmallBlockPoolHeader[edx].FirstFreeBlock, ecx
   {Store the previous first free block as the block header}
   lea eax, [eax + IsFreeBlockFlag]
-  mov [ecx - 4], eax
+  mov [ecx - BlockHeaderSize], eax
   {Insert the pool back into the linked list if it was full}
   jz @SmallPoolWasFull
   {All ok}
@@ -10141,7 +10221,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @PoolIsNowEmpty:
   { mark the current block as released to prevent further call to FreeMem}
-  mov dword ptr [ecx-4], IsFreeBlockFlag
+  mov dword ptr [ecx - BlockHeaderSize], IsFreeBlockFlag
   {Was this pool actually in the linked list of pools with space? If not, it
    can only be the sequential feed pool (it is the only pool that may contain
    only one block, i.e. other blocks have not been split off yet)}
@@ -10340,13 +10420,13 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MediumBlocksLocked:
   {Can we combine this block with the next free block?}
-  test dword ptr [esi + ebx - 4], IsFreeBlockFlag
+  test dword ptr [esi + ebx - BlockHeaderSize], IsFreeBlockFlag
   {Get the next block size and flags in ecx}
-  mov ecx, [esi + ebx - 4]
+  mov ecx, [esi + ebx - BlockHeaderSize]
   jnz @NextBlockIsFree
   {Set the "PreviousIsFree" flag in the next block}
   or ecx, PreviousMediumBlockIsFreeFlag
-  mov [esi + ebx - 4], ecx
+  mov [esi + ebx - BlockHeaderSize], ecx
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @NextBlockChecked:
   {Can we combine this block with the previous free block? We need to
@@ -10666,6 +10746,8 @@ asm
   jmp @UnlockSmallBlockAndExit
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @PoolIsNowEmpty:
+  { mark the current block as released to prevent further call to FreeMem}
+  mov dword ptr [rcx-BlockHeaderSize], IsFreeBlockFlag
   {Was this pool actually in the linked list of pools with space? If not, it
    can only be the sequential feed pool (it is the only pool that may contain
    only one block, i.e. other blocks have not been split off yet)}
@@ -11568,7 +11650,7 @@ asm
 {$endif}
 
 
-  mov ecx, [eax - 4]
+  mov ecx, [eax - BlockHeaderSize]
   {Save ebx}
   push ebx
   {Save esi}
@@ -11800,7 +11882,7 @@ asm
   mov [edi - 8], ebx
   {Store the free part's header}
   lea eax, [ebx + IsMediumBlockFlag + IsFreeBlockFlag];
-  mov [esi + ebp - 4], eax
+  mov [esi + ebp - BlockHeaderSize], eax
   {Bin this free block}
   cmp ebx, MinimumMediumBlockSize
   jb @MediumBlockDownsizeDone
@@ -17433,6 +17515,21 @@ ENDQUOTE}
   for LInd := 0 to High(SmallBlockTypes) do
   begin
     SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteAvailable;
+
+
+    {$ifdef EnableERMS}
+    if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+    begin
+     // if we have ERMS, clear old-fashioned FPU/MMX move routines
+     case SmallBlockTypes[LInd].BlockSize of
+       24, 32, 40, 48, 56, 64, 72:
+       begin
+         SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
+       end;
+     end;
+    end;
+    {$endif}
+
     {Set the move procedure}
 {$ifdef UseCustomFixedSizeMoveRoutines}
     {The upsize move procedure may move chunks in 16 bytes even with 8-byte
@@ -17525,10 +17622,10 @@ ENDQUOTE}
     end else
     {$endif EnableAVX}
     begin
-      {$ifdef EnalbleERMS}
+      {$ifdef EnableERMS}
       if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX_Align16;
       end else
       {$endif}
       begin
@@ -17537,13 +17634,15 @@ ENDQUOTE}
     end;
     {$else}
 {$ifdef USE_CPUID}
-      {$ifdef EnalbleERMS}
+      {$ifdef EnableERMS}
       if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX_Align16
       else
       {$endif}
 {$endif}
+      begin
         SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX16LP
+      end;
       ;
     {$endif}
   {$else}

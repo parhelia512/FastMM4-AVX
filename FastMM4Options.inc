@@ -463,7 +463,7 @@ Combine it with the two options below for further fine-tuning.}
 {$ifndef DisableAVX}
 
   {Set this option (EnableAVX) to enable use of AVX instructions under 64-bit mode.
-  This option has no effect under 32-bit mode. If enalbed, the code will check
+  This option has no effect under 32-bit mode. If enabled, the code will check
   whether the CPU supports AVX or AVX2, and, if yes, will use the 32-byte YMM
   registers for faster memory copy. Besides that, if this option is enabled,
   all allocated memory blocks will be aligned by 32 bytes, that will incur
