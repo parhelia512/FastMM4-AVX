@@ -1641,8 +1641,8 @@ of just one option: "Boolean short-circuit evaluation".}
 
 {-------------------------Public constants-----------------------------}
 const
-  {The current version of FastMM}
-  FastMMVersion = '4.992';
+  {The current version of FastMM4-AVX}
+  FastMM4AvxVersion = '1.05';
   {The number of small block types}
 
 {$ifdef Align32Bytes}
@@ -1655,16 +1655,15 @@ const
 {$endif}
 {$endif}
 
-
-{$ifdef align16bytes}
+{$ifdef Align16bytes}
 {$define AlignAtLeast16Bytes}
 {$endif}
 
-{$ifdef align32bytes}
+{$ifdef Align32bytes}
 {$define AlignAtLeast16Bytes}
 {$endif}
 
-{$ifdef align32bytes}
+{$ifdef Align32bytes}
 {$ifdef 32bit}
    {$Message Fatal '32-bit alignment is not supportd for 32-byte targets'}
 {$endif}
@@ -3830,7 +3829,66 @@ end;
 
 
 {$ifdef 64bit}
+
+procedure Move24Reg64(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+  {$ifndef unix}
+  mov rax, [rcx + 0*8]
+  mov r8,  [rcx + 1*8]
+  mov r9,  [rcx + 2*8]
+  mov [rdx + 0*8], rax
+  mov [rdx + 1*8], r8
+  mov [rdx + 2*8], r9
+  {$else}
+  mov rax, [rdi + 0*8]
+  mov rdx, [rdi + 1*8]
+  mov rcx,  [rdi + 2*8]
+  mov [rsi + 0*8], rax
+  mov [rsi + 1*8], rdx
+  mov [rsi + 2*8], rcx
+  {$endif}
+end;
+
+
+procedure Move56Reg64(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+  {$ifndef unix}
+  mov rax, [rcx + 0*8]
+  mov r8,  [rcx + 1*8]
+  mov r9,  [rcx + 2*8]
+  mov r10, [rcx + 3*8]
+  mov [rdx + 0*8], rax
+  mov [rdx + 1*8], r8
+  mov [rdx + 2*8], r9
+  mov [rdx + 3*8], r10
+  mov rax, [rcx + 4*8]
+  mov r8,  [rcx + 5*8]
+  mov r9,  [rcx + 6*8]
+  mov [rdx + 4*8], rax
+  mov [rdx + 5*8], r8
+  mov [rdx + 6*8], r9
+  {$else}
+  mov rax, [rdi + 0*8]
+  mov rdx, [rdi + 1*8]
+  mov rcx, [rdi + 2*8]
+  mov r8,  [rdi + 3*8]
+  mov [rsi + 0*8], rax
+  mov [rsi + 1*8], rdx
+  mov [rsi + 2*8], rcx
+  mov [rsi + 3*8], r8
+  mov rax, [rdi + 4*8]
+  mov rdx, [rdi + 5*8]
+  mov rcx, [rdi + 6*8]
+  mov [rsi + 4*8], rax
+  mov [rsi + 5*8], rdx
+  mov [rsi + 6*8], rcx
+  {$endif}
+end;
+
+
 {$ifdef EnableAVX}
+
+
 
 
 {$ifndef DisableAVX1}
@@ -5801,7 +5859,23 @@ asm
   {$ifdef AllowAsmNoframe}
   .noframe
   {$endif}
+
 // under Win64, first - RCX, second - RDX, third R8; the caller must preserve RSI and RDI
+
+  cmp    r8, 32
+  ja     @beg
+
+// try a small move of up to 32 bytes
+@again0:
+  mov    rax, [rcx]
+  mov    [rdx], rax
+  add    rcx, 8
+  add    rdx, 8
+  sub    r8, 8
+  jg     @again0
+  jmp    @exit
+
+@beg:
   mov    r9, rsi  // save rsi
   mov    r10, rdi // save rdi
   mov    rsi, rcx
@@ -5910,6 +5984,7 @@ asm
   rep    movsb
   {$endif}
 {$endif}
+@exit:
 end;
 
 {$endif EnableERMS}
@@ -18100,7 +18175,11 @@ ENDQUOTE}
     begin
       // don't use any register copy if we have Fast Short REP MOVSB
       // Fast Short REP MOVSB is very fast under 64-bit
-      SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
+      case SmallBlockTypes[LInd].BlockSize of
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24Reg64;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56Reg64;
+         else  SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
+      end;
     end;
     {$endif}
     {$endif}
