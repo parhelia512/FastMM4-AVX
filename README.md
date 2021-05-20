@@ -1,10 +1,14 @@
 # FastMM4-AVX
 
 FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS support for FastMM4)
+ - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
+ - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
 
-Version 1.04
+Written by Maxim Masiutin <maxim@masiutin.com>
 
-This is a fork of the Fast Memory Manager 4.992 by Pierre le Riche
+Version 1.05
+
+This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
 (see below for the original FastMM4 description)
 
 What was added to FastMM4-AVX in comparison to the original FastMM4:
@@ -227,13 +231,6 @@ contention, FastMM5 is faster.
 You can find the program, used to generate the benchmark data,
 at https://github.com/maximmasiutin/FastCodeBenchmark
 
-AVX1/AVX2/AVX512/ERMS support:
- - Copyright (C) 2017-2020 Ritlabs S.R.L. All rights reserved.
- - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
-
-AVX1/AVX2/AVX512/ERMS support
-is written by Maxim Masiutin <maxim@masiutin.com>
-
 FastMM4-AVX is released under a dual license, and you may choose to use it
 under either the Mozilla Public License 2.0 (MPL 2.1, available from
 https://www.mozilla.org/en-US/MPL/2.0/) or the GNU Lesser General Public
@@ -257,6 +254,19 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
+- 1.05 (20 May 2021) - improved speed of releasing memory blocks on higher thred
+    contention. It is also possible to compile FastMM4-AVX without a single
+    inline assebly code. Renamed some conditional defines to be self-explaining.
+    Rewritten some comments to be meaningful. Made it compile under FreePascal
+    for Linux 64-bit and 32-bit. Also made it compile under FreePascal for
+    Windows 32-bit and 64-bit. Memory move functions for 152, 184 and 216 bytes
+    were incorrect Linux. Move216AVX1 and Move216AVX2 Linux implementation had
+    invalid opcodes. Added support for the GetFPCHeapStatus(). Optimizations on
+    signle-threaded performance. If you define DisablePauseAndSwitchToThread,
+    it will use EnterCriticalSection/LeaveCriticalSectin. An attempt to free a
+    memory block twice was not cought under 32-bit Delphi. Added SSE fixed block
+    copy routines for 32-bit targets. Added support for the "Fast Short REP MOVSB"
+    CPU feature. Removed reduntant SSE code from 64-bit targets.
 - 1.04 (O6 October 2020) - improved use of AVX-512 instructions to avoid turbo
     clock reduction and SSE/AVX transition penalty; made explicit order of
     parameters for GetCPUID to avoid calling convention ambiguity that could

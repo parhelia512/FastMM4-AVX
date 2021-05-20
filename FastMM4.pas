@@ -254,7 +254,7 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
-- 1.05 (18 May 2021) - improved speed of releasing memory blocks on higher thred
+- 1.05 (20 May 2021) - improved speed of releasing memory blocks on higher thred
     contention. It is also possible to compile FastMM4-AVX without a single
     inline assebly code. Renamed some conditional defines to be self-explaining.
     Rewritten some comments to be meaningful. Made it compile under FreePascal
@@ -264,7 +264,9 @@ FastMM4-AVX Version History:
     invalid opcodes. Added support for the GetFPCHeapStatus(). Optimizations on
     signle-threaded performance. If you define DisablePauseAndSwitchToThread,
     it will use EnterCriticalSection/LeaveCriticalSectin. An attempt to free a
-    memory block twice was not cought under 32-bit Delphi.
+    memory block twice was not cought under 32-bit Delphi. Added SSE fixed block
+    copy routines for 32-bit targets. Added support for the "Fast Short REP MOVSB"
+    CPU feature. Removed reduntant SSE code from 64-bit targets.
 - 1.04 (O6 October 2020) - improved use of AVX-512 instructions to avoid turbo
     clock reduction and SSE/AVX transition penalty; made explicit order of
     parameters for GetCPUID to avoid calling convention ambiguity that could
@@ -1653,6 +1655,22 @@ const
 {$endif}
 {$endif}
 
+
+{$ifdef align16bytes}
+{$define AlignAtLeast16Bytes}
+{$endif}
+
+{$ifdef align32bytes}
+{$define AlignAtLeast16Bytes}
+{$endif}
+
+{$ifdef align32bytes}
+{$ifdef 32bit}
+   {$Message Fatal '32-bit alignment is not supportd for 32-byte targets'}
+{$endif}
+{$endif}
+
+
 {----------------------------Public types------------------------------}
 type
 
@@ -2198,7 +2216,7 @@ const
   "Scale factor - A value of 2, 4, or 8 that is multiplied by the index value";
   The value of MaximumCpuScaleFactor is determined by the processor architecture}
   MaximumCpuScaleFactorPowerOf2 = 3;
-  MaximumCpuScaleFactor = UnsignedBit shl MaximumCpuScaleFactorPowerOf2;
+  MaximumCpuScaleFactor = Byte(UnsignedBit shl MaximumCpuScaleFactorPowerOf2);
   {The granularity of small blocks}
 {$ifdef Align32Bytes}
   SmallBlockGranularityPowerOf2 = 5;
@@ -2209,7 +2227,7 @@ const
   SmallBlockGranularityPowerOf2 = 3;
 {$endif}
 {$endif}
-  SmallBlockGranularity = UnsignedBit shl SmallBlockGranularityPowerOf2;
+  SmallBlockGranularity = Byte(UnsignedBit shl SmallBlockGranularityPowerOf2);
 
 
   {The granularity of medium blocks. Newly allocated medium blocks are
@@ -2242,7 +2260,7 @@ const
   {The number of bins reserved for medium blocks}
   MediumBlockBinsPerGroupPowerOf2 = 5;
   {Must be a power of 2, otherwise masks would not work}
-  MediumBlockBinsPerGroup = UnsignedBit shl MediumBlockBinsPerGroupPowerOf2;
+  MediumBlockBinsPerGroup = Byte(UnsignedBit shl MediumBlockBinsPerGroupPowerOf2);
   MediumBlockBinGroupCount = 32;
   MediumBlockBinCount = MediumBlockBinGroupCount * MediumBlockBinsPerGroup;
   {The maximum size allocatable through medium blocks. Blocks larger than this
@@ -2587,6 +2605,21 @@ type
 
 {-------------------------Private constants----------------------------}
 const
+  {$ifdef 32bit}
+  MediumFreeBlockSizePowerOf2 = 3;
+  {$else}
+  MediumFreeBlockSizePowerOf2 = 4;
+  {$endif}
+
+  {$ifdef XE2AndUp}
+    {$if 1 shl MediumFreeBlockSizePowerOf2  <> SizeOf(TMediumFreeBlock)}
+      {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
+        {$Message Fatal 'Invalid MediumFreeBlockSizePowerOf2 constant or SizeOf(TMediumFreeBlock) is not a power of 2'}
+      {$endif}
+    {$ifend}
+  {$endif}
+
+
 
 {$ifndef LogLockContention}
   {$define SmallBlockTypeRecSizeIsPowerOf2}
@@ -2603,7 +2636,7 @@ const
   {$ifdef 64bit}
 	SmallBlockTypeRecSizePowerOf2 = 6;
   {$endif}
-  SmallBlockTypeRecSize = UnsignedBit shl SmallBlockTypeRecSizePowerOf2;
+  SmallBlockTypeRecSize = Byte(UnsignedBit shl SmallBlockTypeRecSizePowerOf2);
 {$endif}
 
 {$ifndef UseReleaseStack}
@@ -2647,28 +2680,35 @@ const
   Intel 64 and IA-32 Architectures Optimization Reference Manual}
 
 {$ifdef EnableMMX}
-  FastMMCpuFeatureMMX                           = UnsignedBit shl 0;
+  FastMMCpuFeatureMMX                           = Byte(UnsignedBit shl 0);
 {$endif}
 
 {$ifdef EnableAVX}
-  FastMMCpuFeatureAVX1                          = UnsignedBit shl 1;
-  FastMMCpuFeatureAVX2                          = UnsignedBit shl 2;
+  FastMMCpuFeatureAVX1                          = Byte(UnsignedBit shl 1);
+  FastMMCpuFeatureAVX2                          = Byte(UnsignedBit shl 2);
   {$ifdef EnableAVX512}
-  FastMMCpuFeatureAVX512                        = UnsignedBit shl 3;
+  FastMMCpuFeatureAVX512                        = Byte(UnsignedBit shl 3);
   {$endif}
 {$endif}
 
 {$ifdef EnableERMS}
-  FastMMCpuFeatureERMS                          = UnsignedBit shl 4;
+  FastMMCpuFeatureERMS                          = Byte(UnsignedBit shl 4);
 {$endif}
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef AssumePauseAndSwitchToThreadAvailable}
   {CPU supports "pause" instruction and Windows supports SwitchToThread() API call}
-  FastMMCpuFeaturePauseAndSwitch                = UnsignedBit shl 5;
+  FastMMCpuFeaturePauseAndSwitch                = Byte(UnsignedBit shl 5);
 {$endif}
 {$endif}
 
+  {CPU supports xmm registers in 32-bit mode}
+  FastMMCpuFeatureSSE                           = Byte(UnsignedBit shl 6);
+
+{$ifdef EnableFSRM}
+  {Fast Short REP MOVSB }
+  FastMMCpuFeatureFSRM                          = Byte(UnsignedBit shl 7);
+{$endif}
 
 {-------------------------Private variables----------------------------}
 var
@@ -2685,23 +2725,23 @@ var
 
 {$ifndef Align32Bytes}
 {$ifndef Align16Bytes}
-    (BlockSize: 8 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: Move4{$endif}),
-{$endif}
+    (BlockSize: 8 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move4{$else}nil{$endif}{$endif}),
+{$endif Align16Bytes}
     (BlockSize: 16 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move12{$else}Move8{$endif}{$endif}),
 {$ifndef Align16Bytes}
-    (BlockSize: 24 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: Move20{$endif}),
-{$endif}
-{$endif}
+    (BlockSize: 24 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move20{$else}Move16{$endif}{$endif}),
+{$endif Align16Bytes}
+{$endif Align32Bytes}
 
     (BlockSize: 32 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move28{$else}Move24{$endif}{$endif}),
 
 {$ifndef Align32Bytes}
 {$ifndef Align16Bytes}
-    (BlockSize: 40 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: Move36{$endif}),
+    (BlockSize: 40 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move36{$else}Move32{$endif}{$endif}),
 {$endif}
     (BlockSize: 48 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move44{$else}Move40{$endif}{$endif}),
 {$ifndef Align16Bytes}
-    (BlockSize: 56 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: Move52{$endif}),
+    (BlockSize: 56 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move52{$else}Move48{$endif}{$endif}),
 {$endif}
 {$endif}
 
@@ -2709,7 +2749,7 @@ var
 
 {$ifndef Align32Bytes}
 {$ifndef Align16Bytes}
-    (BlockSize: 72 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: Move68{$endif}),
+    (BlockSize: 72 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move68{$else}Move64{$endif}{$endif}),
 {$endif}
     (BlockSize: 80),
 {$ifndef Align16Bytes}
@@ -4483,6 +4523,25 @@ asm
 {$endif}
 end;
 
+
+{$ifdef 32Bit}
+procedure Move20_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  mov eax, [eax+16]
+  movaps [edx], xmm0
+  mov [edx+16], eax
+{$else}
+  movups xmm0, [eax]
+  mov eax, [eax+16]
+  movups [edx], xmm0
+  mov [edx+16], eax
+{$endif}
+  xorps xmm0, xmm0
+end;
+{$endif}
+
 procedure Move20(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
@@ -4532,11 +4591,31 @@ asm
   movdqa [rsi], xmm0
   mov [rsi + 16], rdx
   {$endif}
+  xorps xmm0, xmm0
 end;
 {$endif 64bit}
 
 
 {$ifndef ExcludeSmallGranularMoves}
+
+{$ifdef 32Bit}
+procedure Move28_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movups xmm1, [eax+12]
+  movaps [edx], xmm0
+  movups [edx+12], xmm1
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+12]
+  movups [edx], xmm0
+  movups [edx+12], xmm1
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+end;
+{$endif}
 
 procedure Move28(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4572,8 +4651,32 @@ asm
   mov [rsi + 16], rdx
   mov [rsi + 24], edi
   {$endif}
+  xorps xmm0, xmm0
 {$endif}
 end;
+
+{$ifdef 32Bit}
+procedure Move36_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  mov    eax, [eax+32]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  mov    [edx+32], eax
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  mov    eax, [eax+32]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  mov    [edx+32], eax
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+end;
+{$endif}
 
 procedure Move36(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4605,6 +4708,8 @@ asm
   movdqa [rsi + 16], xmm1
   mov [rsi + 32], edi
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
 {$endif}
 end;
 
@@ -4627,9 +4732,34 @@ asm
   movdqa [rsi + 16], xmm1
   mov [rsi + 32], rdx
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
 end;
 {$endif}
 
+{$ifdef 32bit}
+procedure Move44_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movups xmm2, [eax+28]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movups [edx+28], xmm2
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+28]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+28], xmm2
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+end;
+{$endif}
 
 procedure Move44(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4667,8 +4797,39 @@ asm
   mov [rsi + 32], rdx
   mov [rsi + 40], edi
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
 {$endif}
 end;
+
+
+{$ifdef 32bit}
+procedure Move52_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  mov    eax, [eax+48]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  mov    [edx+48], eax
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  mov    eax, [eax+48]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  mov    [edx+48], eax
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+end;
+{$endif 32bit}
 
 procedure Move52(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4708,6 +4869,9 @@ asm
   movdqa [rsi + 32], xmm2
   mov [rsi + 48], edi
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
 {$endif}
 end;
 
@@ -4739,11 +4903,43 @@ asm
   movdqa [rsi + 32], xmm2
   mov [rsi + 48], rdx
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
 end;
 
 {$endif 64bit}
 
 {$ifndef ExcludeSmallGranularMoves}
+
+{$ifdef 32bit}
+procedure Move60_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  movups xmm3, [eax+44]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  movups [edx+44], xmm3
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  movups xmm3, [eax+44]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  movups [edx+44], xmm3
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+end;
+{$endif 32bit}
 
 procedure Move60(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4789,8 +4985,44 @@ asm
   mov [rsi + 48], rdx
   mov [rsi + 56], edi
   {$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
 {$endif}
 end;
+
+{$ifdef 32Bit}
+procedure Move68_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  movaps xmm3, [eax+48]
+  mov    eax,  [eax+64]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  movaps [edx+48], xmm3
+  mov    [edx+64], eax
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  movups xmm3, [eax+48]
+  mov    eax,  [eax+64]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  movups [edx+48], xmm3
+  mov    [edx+64], eax
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+end;
+{$endif 32Bit}
 
 procedure Move68(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
@@ -4813,7 +5045,7 @@ asm
   fistp qword ptr [edx + 16]
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
-{$else}
+{$else 32Bit}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4838,14 +5070,133 @@ asm
   movdqa [rsi + 48], xmm3
   mov [rsi + 64], edi
   {$endif}
-{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+{$endif 32Bit}
 end;
+
+{$ifdef 32Bit}
+procedure Move76_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  movaps xmm3, [eax+48]
+  movups xmm4, [eax+60]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  movaps [edx+48], xmm3
+  movups [edx+60], xmm4
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  movups xmm3, [eax+48]
+  movups xmm4, [eax+60]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  movups [edx+48], xmm3
+  movups [edx+60], xmm4
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+  xorps xmm4, xmm4
+end;
+{$endif 32Bit}
+
+{$ifdef 32bit}
+procedure Move84_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  movaps xmm3, [eax+48]
+  movaps xmm4, [eax+64]
+  mov    eax,  [eax+80]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  movaps [edx+48], xmm3
+  movaps [edx+64], xmm4
+  mov    [edx+80], eax
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  movups xmm3, [eax+48]
+  movups xmm4, [eax+64]
+  mov    eax,  [eax+80]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  movups [edx+48], xmm3
+  movups [edx+64], xmm4
+  mov    [edx+80], eax
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+  xorps xmm4, xmm4
+end;
+{$endif 32bit}
+
+
+{$ifdef 32Bit}
+procedure Move92_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  movaps xmm0, [eax]
+  movaps xmm1, [eax+16]
+  movaps xmm2, [eax+32]
+  movaps xmm3, [eax+48]
+  movaps xmm4, [eax+64]
+  movups xmm5, [eax+76]
+  movaps [edx], xmm0
+  movaps [edx+16], xmm1
+  movaps [edx+32], xmm2
+  movaps [edx+48], xmm3
+  movaps [edx+64], xmm4
+  movups [edx+76], xmm5
+{$else}
+  movups xmm0, [eax]
+  movups xmm1, [eax+16]
+  movups xmm2, [eax+32]
+  movups xmm3, [eax+48]
+  movups xmm4, [eax+64]
+  movups xmm5, [eax+76]
+  movups [edx], xmm0
+  movups [edx+16], xmm1
+  movups [edx+32], xmm2
+  movups [edx+48], xmm3
+  movups [edx+64], xmm4
+  movups [edx+76], xmm5
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
+  xorps xmm4, xmm4
+  xorps xmm5, xmm5
+end;
+{$endif 32bit}
 
 {$endif ExcludeSmallGranularMoves}
 
 {$endif UseCustomFixedSizeMoveRoutines}
 
 {$ifdef ASMVersion}
+
+
+procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); forward;
 
 
 {Variable size move procedure: Rounds ACount up to the next multiple of 16 less
@@ -4857,14 +5208,7 @@ asm
 {$ifdef 32Bit}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-
-  xchg    esi, eax // save esi
-  xchg    edi, edx // save edi
-  cld
-  rep     movsb
-  xchg    esi, eax // restore esi
-  xchg    edi, edx // restore edi
-  ret
+  jmp MoveWithErmsNoAVX
 
 @NoERMS:
   {Make the counter negative based: The last 12 bytes are moved separately}
@@ -4949,11 +5293,15 @@ asm
   mov eax, [eax + ecx + 8]
   mov [edx + ecx + 8], eax
 {$endif ForceMMX}
-{$else EnableMMX}
+{$else 32bit}
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
   .noframe
   {$endif}
+  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  jz @NoERMS
+  jmp MoveWithErmsNoAVX
+@NoERMS:
   {Make the counter negative based: The last 8 bytes are moved separately}
   sub r8, 8
   add rcx, r8
@@ -4968,6 +5316,7 @@ asm
   {Are there another 16 bytes to move?}
   add r8, 16
   js @MoveLoop
+  xorps xmm0, xmm0
   {$ifdef AsmCodeAlign}.align 8{$endif}
 @MoveLast8:
   {Do the last 8 bytes}
@@ -4988,13 +5337,14 @@ asm
   {Are there another 16 bytes to move?}
   add rdx, 16
   js @MoveLoop
+  xorps xmm0, xmm0
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @MoveLast8:
   {Do the last 8 bytes}
   mov rcx, [rdi + rdx]
   mov [rsi + rdx], rcx
   {$endif unix}
-{$endif EnableMMX}
+{$endif 32bit}
 end;
 
 
@@ -5318,18 +5668,133 @@ p. 3.7.7 (Enhanced REP MOVSB and STOSB operation (ERMSB)).
 We first check the corresponding bit in the CPUID, and, if it is supported,
 call this routine.}
 
-procedure MoveWithErmsNoAVX_Align16(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+const
+  cAlignErmsDestinationBits = 6;
+  cAlignErmsDestinationBoundary = (1 shl cAlignErmsDestinationBits);
+  cAlignErmsDestinationMask     = cAlignErmsDestinationBoundary-1;
+
+  cRoundErmsBlockSizeBits = 6;
+  cRoundErmsBlockSizeBoundary = (1 shl cRoundErmsBlockSizeBits);
+  cRoundErmsBlockSizeMask     = cRoundErmsBlockSizeBoundary-1;
+
+  cRepMovsSmallBlock = cRoundErmsBlockSizeBoundary * 3;
+
+procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
 // Under 32-bit Windows or Unix, the call passes first parametr in EAX, second in EDX, third in ECX
 
-  xchg    esi, eax // save esi
-  xchg    edi, edx // save edi
-  cld
-  rep     movsb
-  xchg    esi, eax // restore esi
-  xchg    edi, edx // restore edi
+  push    ebx
+  push    esi
+  push    edi
+  mov     esi, eax
+  mov     edi, edx
 
+  cmp     ecx, cRepMovsSmallBlock
+  jbe     @SmallBlock
+// test destination alignment
+  mov     eax, edi
+  and     eax, cAlignErmsDestinationMask
+  jz      @DestinationAligned
+  mov     ebx, ecx
+  mov     ecx, cAlignErmsDestinationBoundary
+  sub     ecx, eax
+  sub     ebx, ecx
+
+@again:
+  mov     eax, [esi]
+  mov     edx, [esi+4]
+  mov     [edi], eax
+  mov     [edi+4], edx
+  add     esi, 8
+  add     edi, 8
+  sub     ecx, 8
+  jg      @again
+  add     ebx, ecx
+  add     esi, ecx
+  add     edi, ecx
+  mov     ecx, ebx
+
+@DestinationAligned:
+
+// test block size rounding
+  mov     eax, ecx
+  and     eax, cRoundErmsBlockSizeMask
+  jz      @SingleMove  // the block size is aligned
+  sub     ecx, eax
+  shr     ecx, 2
+  cld
+  rep     movsd
+  mov     ecx, eax
+  jmp     @SmallBlock
+
+@SingleMove:
+  shr     ecx, 2
+  cld
+  rep     movsd
+  jmp     @finish
+
+@SmallBlock:
+
+// on 32-bit, fast short strings do not work, at least on Ice Lake
+
+  cmp     ecx, 8
+  jb      @below8left
+
+  cmp     ecx, 32
+  jb      @below32left
+  test    FastMMCpuFeatures, FastMMCpuFeatureSSE
+  jz      @NoSSE // no SSE
+
+  sub     ecx, 32
+@LoopSSE:
+  movups  xmm0, [esi+16*0]
+  movups  xmm1, [esi+16*1]
+  movups  [edi+16*0], xmm0
+  movups  [edi+16*1], xmm1
+  add     esi, 32
+  add     edi, 32
+  sub     ecx, 32
+  jge     @LoopSSE
+  xorps   xmm0, xmm0
+  xorps   xmm1, xmm1
+  add     ecx, 32
+  jz      @finish
+
+
+@NoSSE:
+@below32left:
+  sub     ecx, 8
+  js      @below8left_add
+
+@again3:
+  mov     eax, [esi]
+  mov     edx, [esi+4]
+  mov     [edi], eax
+  mov     [edi+4], edx
+  add     esi, 8
+  add     edi, 8
+  sub     ecx, 8
+  jge     @again3
+
+@below8left_add:
+  add     ecx, 8
+
+@below8left:
+  jz      @finish
+
+@loop4:
+  mov     eax, [esi]
+  mov     [edi], eax
+  add     esi, 4
+  add     edi, 4
+  sub     ecx, 4
+  jg      @loop4
+
+@finish:
+  pop     edi
+  pop     esi
+  pop     ebx
 
 {$else}
   {$ifndef unix}
@@ -5337,39 +5802,140 @@ asm
   .noframe
   {$endif}
 // under Win64, first - RCX, second - RDX, third R8; the caller must preserve RSI and RDI
-  mov    r9, rsi
-  mov    r10, rdi
+  mov    r9, rsi  // save rsi
+  mov    r10, rdi // save rdi
   mov    rsi, rcx
   mov    rdi, rdx
   mov    rcx, r8
+
+  cmp     rcx, cRepMovsSmallBlock
+  jbe     @SmallBlock
+// test destination alignment
+  mov     rax, rdi
+  and     rax, cAlignErmsDestinationMask
+  jz      @DestinationAligned
+  mov     r8, rcx
+  mov     rcx, cAlignErmsDestinationBoundary
+  sub     rcx, rax
+  sub     r8, rcx
+
+@again:
+  mov     rax, [rsi]
+  mov     rdx, [rsi+8]
+  mov     [rdi], rax
+  mov     [rdi+8], rdx
+  add     rsi, 16
+  add     rdi, 16
+  sub     rcx, 16
+  jg      @again
+  add     r8, rcx
+  add     rsi, rcx
+  add     rdi, rcx
+  mov     rcx, r8
+
+@DestinationAligned:
+
+// test block size rounding
+  mov     rax, rcx
+  and     rax, cRoundErmsBlockSizeMask
+  jz      @SingleMove  // the block size is aligned
+  sub     rcx, rax
+  shr     rcx, 3
   cld
-  rep    movsb
+  rep     movsq
+  mov     rcx, rax
+  jmp     @TailAfterMovs
+
+@SingleMove:
+  shr     rcx, 3
+  cld
+  rep     movsq
+  jmp     @finish
+
+{$ifdef EnableFSRM}
+@movs:
+  cld
+  rep     movsb
+  jmp     @finish
+{$endif}
+
+@SmallBlock:
+  cmp     rcx, 64
+  jbe     @Left64OrLess
+
+{$ifdef EnableFSRM}
+  // moves of 64 bytes or less are good only when we have fast short strings on 64 bit,
+  // but not on 32 bit
+  test    FastMMCpuFeatures, FastMMCpuFeatureFSRM
+  jnz     @movs
+{$endif}
+
+@Left64OrLess:
+
+@TailAfterMovs:
+  cmp     rcx, 16
+  jb      @below16left
+  sub     rcx, 16
+@again3:
+  mov     rax, [rsi]
+  mov     rdx, [rsi+8]
+  mov     [rdi], rax
+  mov     [rdi+8], rdx
+  add     rsi, 16
+  add     rdi, 16
+  sub     rcx, 16
+  jge     @again3
+  add     rcx, 16
+
+@below16left:
+  jz      @finish
+
+@again2:
+  mov     eax, [rsi]
+  mov     [rdi], eax
+  add     rsi, 4
+  add     rdi, 4
+  sub     rcx, 4
+  jg      @again2
+@finish:
   mov    rsi, r9
   mov    rdi, r10
   {$else}
 // Under Unix 64 the first 3 arguments are passed in RDI, RSI, RDX
-  xchg   rsi, rdi
+  mov    rcx, rsi
+  mov    rsi, rdi
+  mov    rdi, rcx
   mov    rcx, rdx
   cld
   rep    movsb
   {$endif}
 {$endif}
 end;
+
 {$endif EnableERMS}
 
 {$ifdef Align32Bytes}
 procedure MoveX32LpUniversal(const ASource; var ADest; ACount: NativeInt);
+var
+  F: Byte;
 begin
 {$ifdef USE_CPUID}
+  F := FastMMCpuFeatures;
+{$ifdef EnableFSRM}
+  if F and FastMMCpuFeatureFSRM <> 0 then
+  begin
+    MoveWithErmsNoAVX(ASource, ADest, ACount);
+  end else
+{$endif}
   {$ifdef EnableAVX}
-  if (FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0 then
+  if (F and FastMMCpuFeatureAVX2) <> 0 then
   begin
     {$ifdef EnableERMS}
-    if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+    if (F and FastMMCpuFeatureERMS) <> 0 then
     begin
       {$ifdef EnableAVX512}
       {$ifndef DisableMoveX32LpAvx512}
-      if (FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0 then
+      if (F and FastMMCpuFeatureAVX512) <> 0 then
       begin
         MoveX32LpAvx512WithErms(ASource, ADest, ACount)
       end
@@ -5385,10 +5951,10 @@ begin
       MoveX32LpAvx2NoErms(ASource, ADest, ACount)
     end;
   end else
-  if (FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0 then
+  if (F and FastMMCpuFeatureAVX1) <> 0 then
   begin
     {$ifdef EnableERMS}
-    if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+    if (F and FastMMCpuFeatureERMS) <> 0 then
     begin
       MoveX32LpAvx1WithErms(ASource, ADest, ACount)
     end else
@@ -5400,9 +5966,9 @@ begin
   {$endif EnableAVX}
   begin
     {$ifdef EnableERMS}
-    if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+    if (F and FastMMCpuFeatureERMS) <> 0 then
     begin
-      MoveWithErmsNoAVX_Align16(ASource, ADest, ACount)
+      MoveWithErmsNoAVX(ASource, ADest, ACount)
     end else
     {$endif}
     begin
@@ -5424,15 +5990,7 @@ asm
 {$ifdef 32Bit}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-
-  xchg    esi, eax // save esi
-  xchg    edi, edx // save edi
-  cld
-  rep     movsb
-  xchg    esi, eax // restore esi
-  xchg    edi, edx // restore edi
-  ret
-
+  jmp MoveWithErmsNoAVX
 
 @NoERMS:
   {Make the counter negative based: The last 4 bytes are moved separately}
@@ -6499,7 +7057,7 @@ begin
   if LPreviousFreeBlock = LNextFreeBlock then
   begin
     {Get the bin number for this block size}
-    LBinNumber := (UIntPtr(LNextFreeBlock) - UIntPtr(@MediumBlockBins)) div SizeOf(TMediumFreeBlock);
+    LBinNumber := (UIntPtr(LNextFreeBlock) - UIntPtr(@MediumBlockBins)) shr MediumFreeBlockSizePowerOf2;
     LBinGroupNumber := LBinNumber shr MediumBlockBinsPerGroupPowerOf2;
     {Flag this bin as empty}
     MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber]
@@ -6538,7 +7096,7 @@ asm
   {Get the bin number for this block size in ecx}
   sub ecx, offset MediumBlockBins
   mov edx, ecx
-  shr ecx, 3
+  shr ecx, MediumFreeBlockSizePowerOf2
   {Get the group number in edx}
   movzx edx, dh
   {Flag this bin as empty}
@@ -6576,7 +7134,7 @@ asm
   lea r8, MediumBlockBins
   sub rcx, r8
   mov edx, ecx
-  shr ecx, 4
+  shr ecx, MediumFreeBlockSizePowerOf2
   {Get the group number in edx}
   shr edx, 9
   {Flag this bin as empty}
@@ -6600,6 +7158,7 @@ end;
 procedure InsertMediumBlockIntoBin(APMediumFreeBlock: PMediumFreeBlock; AMediumBlockSize: Cardinal);
 {$ifndef ASMVersion}
 var
+  LShift: Byte;
   LBinNumber,
   LBinGroupNumber: Cardinal;
   LPBin,
@@ -6623,9 +7182,10 @@ begin
   begin
     {Get the group number}
     LBinGroupNumber := LBinNumber shr MediumBlockBinsPerGroupPowerOf2;
+    LShift := LBinNumber and (MediumBlockBinsPerGroup-1); // We need a separate variable LShift to avoid range check error
     {Flag this bin as used}
     MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber]
-      or (UnsignedBit shl (LBinNumber and (MediumBlockBinsPerGroup-1)));
+      or (UnsignedBit shl LShift);
     {Flag the group as used}
     MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap
       or (UnsignedBit shl LBinGroupNumber);
@@ -12751,6 +13311,27 @@ asm
   {Large blocks are already zero filled}
   cmp ebx, MaximumMediumBlockSize - BlockHeaderSize
   jae @Done
+
+
+  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  jz @NoERMS
+
+  push edi
+  push eax
+  xor  eax, eax
+  mov  edi, edx
+  sub  edi, ebx
+  mov  ecx, ebx
+  cld
+  rep  stosb
+  mov  [edi], eax // clear last 4 bytes
+  pop  eax
+  pop  edi
+  jmp  @Done
+
+
+
+@NoERMS:
   {Make the counter negative based}
   neg ebx
   {Load zero into st(0)}
@@ -12807,17 +13388,19 @@ asm
   {Large blocks are already zero filled}
   cmp rbx, MaximumMediumBlockSize - BlockHeaderSize
   jae @Done
-  {Make the counter negative based}
-  neg rbx
-  {Load zero into xmm0}
-  pxor xmm0, xmm0
-  {Clear groups of 16 bytes. Block sizes are always 8 less than a multiple of
-   16.}
-  {$ifdef AsmCodeAlign}.align 16{$endif}
-@FillLoop:
-  movdqa [rdx + rbx], xmm0
-  add rbx, 16
-  js @FillLoop
+
+  push rdi
+  push rax
+  xor  eax, eax
+  mov  rdi, rdx
+  sub  rdi, rbx
+  mov  rcx, rbx
+  cld
+  rep  stosb
+  mov  [rdi], rax // clear last 8 bytes
+  pop  rax
+  pop  rdi
+  jmp  @Done
   {Clear the last 8 bytes}
   {$ifdef AsmCodeAlign}.align 4{$endif}
 @ClearLastQWord:
@@ -17373,6 +17956,18 @@ This is because the operating system would not save the registers and the states
       end;
 {$endif EnableMMX}
 
+
+      if
+        ((LReg1.RegEDX and (UnsignedBit shl 25)) <> 0)
+{$ifdef Use_GetEnabledXStateFeatures_WindowsAPICall}
+        and ((EnabledXStateFeatures and (UnsignedBit shl XSTATE_LEGACY_SSE)) <> 0)
+{$endif}
+      then
+      begin
+        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureSSE;
+      end;
+
+
 { Here is the Intel algorithm to detext AVX
 { QUOTE from the Intel 64 and IA-32 Architectures Optimization Reference Manual
 1) Detect CPUID.1:ECX.OSXSAVE[bit 27] = 1 (XGETBV enabled for application use1)
@@ -17441,6 +18036,15 @@ ENDQUOTE}
         FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureERMS;
       end;
       {$endif EnableERMS}
+
+      {$ifdef EnableFSRM}
+      if (MaxInputValueBasic > 7) and
+{EDX: Bit 04: Supports Fast Short REP MOVSB if 1.}
+      ((LReg7_0.RegEDX and (UnsignedBit shl 4)) <> 0) then
+      begin
+        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureFSRM;
+      end;
+      {$endif}
     end;
 
   end;
@@ -17465,19 +18069,43 @@ ENDQUOTE}
   begin
     SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteAvailable;
 
-
-    {$ifdef EnableERMS}
-    if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+    {$ifdef 32bit}
+    {$ifndef unix}
+    {$ifdef USE_CPUID}
+    // if we have SSE, use SSE copy
+    // even if we have Fast Short REP MOVSB, it is not as fast for sizes below 92 bytes under 32-bit
+    if ((FastMMCpuFeatures and FastMMCpuFeatureSSE) <> 0) then
     begin
-     // if we have ERMS, clear old-fashioned FPU/MMX move routines
-     case SmallBlockTypes[LInd].BlockSize of
-       24, 32, 40, 48, 56, 64, 72:
-       begin
-         SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
-       end;
-     end;
+      case SmallBlockTypes[LInd].BlockSize of
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move20_32bit_SSE;
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move28_32bit_SSE;
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move36_32bit_SSE;
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move44_32bit_SSE;
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move52_32bit_SSE;
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move60_32bit_SSE;
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move68_32bit_SSE;
+        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move76_32bit_SSE;
+        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move84_32bit_SSE;
+        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move92_32bit_SSE;
+      end;
     end;
     {$endif}
+    {$endif}
+    {$endif}
+
+    {$ifdef 64bit}
+    {$ifdef EnableFSRM}
+    {$ifdef USE_CPUID}
+    if (FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0 then
+    begin
+      // don't use any register copy if we have Fast Short REP MOVSB
+      // Fast Short REP MOVSB is very fast under 64-bit
+      SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
+    end;
+    {$endif}
+    {$endif}
+    {$endif}
+
 
     {Set the move procedure}
 {$ifdef UseCustomFixedSizeMoveRoutines}
@@ -17489,7 +18117,10 @@ ENDQUOTE}
 {$ifdef EnableAVX}
 
   {$ifdef EnableAVX512}
-    if (FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0 then
+    // if we have AVX-512 but don't have FSRM
+    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0)
+        {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+    then
     begin
       case SmallBlockTypes[LInd].BlockSize of
          32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX512;
@@ -17507,7 +18138,10 @@ ENDQUOTE}
     end else
   {$endif}
     {$ifndef DisableAVX2}
-    if (FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0 then
+    // if we have AVX2 but don't have FSRM
+    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0)
+      {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+    then
     begin
       case SmallBlockTypes[LInd].BlockSize of
          32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX2;
@@ -17521,7 +18155,10 @@ ENDQUOTE}
     end else
     {$endif DisableAVX2}
     {$ifndef DisableAVX1}
-    if (FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0 then
+    // if we have AVX1 but don't have FSRM
+    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0)
+      {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+      then
     begin
       case SmallBlockTypes[LInd].BlockSize of
          32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX1;
@@ -17545,13 +18182,13 @@ ENDQUOTE}
     {$ifdef Align32Bytes}
     {$ifdef EnableAVX}
       {We must check AVX1 bit before checking the AVX2 bit}
-    if (FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0 then
+    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
-      if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
       begin
       {$ifdef EnableAVX512}
       {$ifndef DisableMoveX32LpAvx512}
-        if (FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0 then
+        if ((FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
         begin
           SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx512WithErms;
         end else
@@ -17565,38 +18202,44 @@ ENDQUOTE}
         SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx2NoErms;
       end;
     end else
-    if (FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0 then
+    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
       SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx1NoErms;
     end else
     {$endif EnableAVX}
     begin
       {$ifdef EnableERMS}
-      if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
+      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0)
+        {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
+      then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX_Align16;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX;
       end else
       {$endif}
       begin
         SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX16LP;
       end;
     end;
-    {$else}
-{$ifdef USE_CPUID}
+    {$else Align32Bytes}
+      {$ifdef USE_CPUID}
       {$ifdef EnableERMS}
-      if (FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0 then
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX_Align16
+      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0)
+         {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
+      then
+      begin
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX;
+      end
       else
-      {$endif}
-{$endif}
+      {$endif EnableERMS}
+      {$endif USE_CPUID}
       begin
         SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX16LP
       end;
       ;
-    {$endif}
-  {$else}
+    {$endif Align32Bytes}
+  {$else UseCustomVariableSizeMoveRoutines}
       SmallBlockTypes[LInd].UpsizeMoveProcedure := @System.Move;
-  {$endif}
+  {$endif UseCustomVariableSizeMoveRoutines}
 {$endif}
 {$ifdef LogLockContention}
     SmallBlockTypes[LInd].BlockCollector.Initialize;

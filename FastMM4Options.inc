@@ -525,12 +525,22 @@ Combine it with the two options below for further fine-tuning.}
 
   {Set this option (EnableERMS) to enable Enhanced Rep Movsb/Stosb CPU feature,
   which improves speed of medium and large block memory copy
-  under 32-bit or 64-bit modes}
+  under 32-bit or 64-bit modes after checking the corresponding CPUID bit}
 
   {$define EnableERMS}
 
 {$endif}
 
+
+{$ifndef DisableFSRM}
+
+  {Set this option (EnableFSRM) to enable Fast Short REP MOVSB CPU feature,
+  introduced by the Ice Lake microarchitecture, which improves speed of small
+  block memory copy under 64-bit mode after checking the corresponding CPUID bit}
+
+  {$define EnableFSRM}
+
+{$endif}
 
 {-----------------------Memory Manager Sharing Options------------------------}
 
