@@ -1318,8 +1318,8 @@ interface
   {$undef RequireIDEPresenceForLeakReporting}
   {$undef UseOutputDebugString}
   {$ifdef PIC}
-    {BASM version does not support position independent code}kj kj
-    {$undef ASMVersion}ffff
+    {BASM version does not support position independent code}
+    {$undef ASMVersion}
   {$endif}
   {$ifndef FPC}
     {$define MACOS_OR_KYLIX}
