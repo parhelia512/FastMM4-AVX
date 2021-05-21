@@ -1,6 +1,6 @@
 (*
 
-FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS support for FastMM4)
+FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support for FastMM4)
  - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
  - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
 
@@ -34,13 +34,13 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
      there may be no benefit compared to the original FastMM4;
    - the number of iterations of "pause"-based spin-wait loops is 5000,
      before relinquishing to SwitchToThread();
-   - see https://stackoverflow.com/a/44916975/6910868 for more details on the
+   - see https://stackoverflow.com/a/44916975 for more details on the
      implementation of the "pause"-based spin-wait loops;
    - using normal memory store to release a lock:
      FastMM4-AVX uses normal memory store, i.e., the "mov" instruction, rather
      then the bus-locking "xchg" instruction to write into the synchronization
      variable (LockByte) to "release a lock" on a data structure,
-     see https://stackoverflow.com/a/44959764/6910868
+     see https://stackoverflow.com/a/44959764
      for discussion on releasing a lock;
      you man define "InterlockedRelease" to get the old behavior of the original
      FastMM4.
@@ -88,11 +88,14 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
    - if the CPU supports Enhanced REP MOVSB/STOSB (ERMS), use this feature
      for faster memory copy (under 32 bit or 64-bit) (see the EnableERMS define,
      on by default, use DisableERMS to turn it off);
+   - if the CPU supports Fast Short REP MOVSB (FSRM), uses this feature instead
+     of AVX;
    - branch target alignment in assembly routines is only used when
-     EnableAsmCodeAlign is defined; Delphi may incorrectly encode conditional
+     EnableAsmCodeAlign is defined; Delphi incorrectly encodes conditional
      jumps, i.e., use long, 6-byte instructions instead of just short, 2-byte,
      and this may affect branch prediction, so the benefits of branch target
-     alignment may not outweigh the disadvantage of affected branch prediction;
+     alignment may not outweigh the disadvantage of affected branch prediction,
+     see https://stackoverflow.com/q/45112065
    - compare instructions + conditional jump instructions are put together
      to allow macro-op fusion (which happens since Core2 processors, when
      the first instruction is a CMP or TEST instruction and the second
@@ -1606,10 +1609,8 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 
 {$ifdef ASMVersion}
-  {$ifndef FPC}
-    {$define FastFreememNeedAssemberCode}
-    {$define FastReallocMemNeedAssemberCode}
-  {$endif}
+  {$define FastFreememNeedAssemberCode}
+  {$define FastReallocMemNeedAssemberCode}
 {$endif}
 
 {$ifdef AsmVersion}
@@ -10135,7 +10136,7 @@ end;
 {$endif}
 {$endif FastGetMemNeedAssemblerCode}
 
-{$ifndef ASMVersion}
+{$ifndef FastFreememNeedAssemberCode}
 {Frees a medium block, returning 0 on success, -1 otherwise}
 function FreeMediumBlock(APointer: Pointer
   {$ifdef UseReleaseStack}; ACleanupOperation: Boolean = false{$endif}): Integer;
@@ -10395,7 +10396,7 @@ begin
   until False;
 {$endif UseReleaseStack}
 end;
-{$endif ASMVersion}
+{$endif FastFreememNeedAssemberCode}
 
 {Replacement for SysFreeMem}
 function FastFreeMem(APointer: Pointer): {$ifdef fpc}{$ifdef CPU64}PtrUInt{$else}NativeUInt{$endif}{$else}Integer{$endif};
