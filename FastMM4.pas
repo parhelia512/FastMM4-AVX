@@ -18175,7 +18175,7 @@ This is because the operating system would not save the registers and the states
       end;
 {$endif EnableMMX}
 
-
+{$ifdef 32bit}
       if
         ((LReg1.RegEDX and (UnsignedBit shl 25)) <> 0)
 {$ifdef Use_GetEnabledXStateFeatures_WindowsAPICall}
@@ -18185,7 +18185,7 @@ This is because the operating system would not save the registers and the states
       begin
         FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureSSE;
       end;
-
+{$endif}
 
 { Here is the Intel algorithm to detext AVX
 { QUOTE from the Intel 64 and IA-32 Architectures Optimization Reference Manual
