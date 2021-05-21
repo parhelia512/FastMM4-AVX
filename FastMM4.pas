@@ -17152,7 +17152,7 @@ begin
   end;
   {Step through all the large blocks}
 {$ifndef AssumeMultiThreaded}
-  if LLargeBlocksLocked then
+  if IsMultiThread then
 {$endif}
   begin
 {$ifndef AssumeMultiThreaded}
