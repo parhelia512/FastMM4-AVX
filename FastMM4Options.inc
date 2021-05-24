@@ -20,7 +20,10 @@ Set the default options for FastMM here.
  (no Align16Bytes or Align32Bytes are defined),
  Medium and large blocks are always 16-byte aligned.
 
- If you enable AVX, then the alignment will always be 32 bytes.}
+ If you enable AVX, then the alignment will always be 32 bytes. However, if your
+ CPU supports "Fast Short REP MOVSB" (Ice Lake or newer), you can disable AVX,
+ and align by just 8 bytes, and this may even be faster because less memory is
+ wasted on alignment}
 
 {.$define Align16Bytes}
 {.$define Align32Bytes}
@@ -231,15 +234,24 @@ at the beginning of the main .pas file for the discussion }
 {$define ASMVersion}
 
 
-{Allow using ".align" assembler directive for the 32-bit or 64-bit Delphi
- assembly.
- FreePascal doesn't support ".align".
+{Set this option to disable any inline assembly at all. However, it would not
+be able to use efficient locking without inline assembly.}
+
+{.$define PurePascal}
+
+
+{Define the "EnableAsmCodeAlign" to allow using ".align" assembler
+ directive for the 32-bit or 64-bit inline assembly.
  Delphi 32-bit or 64-bit compiler incorrectly encodes conditional jumps
  (used 6-byte instructions instead of just 2 bytes, so it prevents branch
- predicions. So don't use it for Embarcadero (former Borland) 32-bit or 64-bit
- Delphi neither for FreePascal}
+ predicions. So for Embarcadero (former Borland) 32-bit or 64-bit
+ Delphi, EnableAsmCodeAlign will have no effect. However, undre FreePascal
+ it turns on using the ".align". To force using it under Delphi, define
+ "ForceAsmCodeAlign" }
 
-{.$define EnableAsmCodeAlign}
+
+{$define EnableAsmCodeAlign}
+{.$define ForceAsmCodeAlign}
 
 
 {Allow pascal code alignment}
@@ -446,7 +458,7 @@ Combine it with the two options below for further fine-tuning.}
  size move routines, so if UseCustomVariableSizeMoveRoutines is not set then
  this option has no effect.}
 
-{.$define EnableMMX}
+{$define EnableMMX}
 
 
 {$ifndef DontForceMMX}

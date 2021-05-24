@@ -6,7 +6,7 @@ FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support fo
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.05
+Version 1.06
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -73,7 +73,10 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
    - if EnableAVX is defined, all memory blocks are aligned by 32 bytes, but
      you can also use Align32Bytes define without AVX; please note that the memory
      overhead is higher when the blocks are aligned by 32 bytes, because some
-     memory is lost by padding;
+     memory is lost by padding; however, if your CPU supports
+     "Fast Short REP MOVSB" (Ice Lake or newer), you can disable AVX, and align
+     by just 8 bytes, and this may even be faster because less memory is wasted
+     on alignment;
    - with AVX, memory copy is secure - all XMM/YMM/ZMM registers used to copy
      memory are cleared by vxorps/vpxor, so the leftovers of the copied memory
      are not exposed in the XMM/YMM/ZMM registers;
@@ -258,6 +261,21 @@ If not, see <http://www.gnu.org/licenses/>.
 
 
 FastMM4-AVX Version History:
+
+- 1.06 (24 May 2021) - it can now be compiled with any alignment (8, 16, 32)
+    regardless of the target (x86, x64) and whether inline assembly is used
+    or not; the "PurePascal" conditional define to disable inline assembly at
+    all, however, in this case, efficient locking would not work since it
+    uses inline assembly; FreePascal now uses the original FreePascal compiler
+    mode, rather than the Delphi compatibility mode as before; resolved many
+    FreePascal compiler warnings; supported branch target alignment
+    in FreePascal inline assembly; small block types now always have
+    block sizes of 1024 and 2048 bytes, while in previous versions
+    instead of 1024-byte blocks there were 1056-byte blocks,
+    and instead of 2048-byte blocks were 2176-byte blocks;
+    fixed Delphi compiler hints for 64-bit Release mode; Win32 and Win64 
+    versions compiled under Delphi and FreePascal passed the all the FastCode 
+    validation suites.
 
 - 1.05 (20 May 2021) - improved speed of releasing memory blocks on higher thread
     contention. It is also possible to compile FastMM4-AVX without a single
@@ -1204,8 +1222,8 @@ interface
   {$endif}
 {$else}
   {Defines for FreePascal}
-  {$mode delphi}
   {$define DisableAVX512}
+  {$asmmode intel}
   {$ifdef CPUX64}
     {$asmmode intel}
     {$define 64bit}
@@ -1226,7 +1244,8 @@ interface
  "pause" and SwitchToThread() are available, otherwisw will jump to pascal versions
  of FastGetmem and FastFreemem. However, if we assume that "pause" and SwitchToThread()
  are available (AssumePauseAndSwitchToThreadAvailable), we would not do any check,
- i.e., undefine CheckPauseAndSwitchToThreadForAsmVersion}
+ i.e., undefine CheckPauseAndSwitchToThreadFor
+ }
 
 {$ifdef ASMVersion}
 {$define CheckPauseAndSwitchToThreadForAsmVersion}
@@ -1250,13 +1269,10 @@ interface
 {$ifdef 64bit}
 
   {$ifdef EnableAVX}
-    {Under 64 bit with AVX, memory blocks must always be 16-byte aligned,
+    {Under 64 bit with AVX, memory blocks must always be 32-byte aligned,
     since we are using 32-bit load/store, and they have to be aligned,
     a store across page boundary invokes 150-cycle penalty on Sandy Bridge}
     {$define Align32Bytes}
-  {$else}
-    {Under 64 bit memory blocks must always be 16-byte aligned}
-    {$define Align16Bytes}
   {$endif}
 
   {No need for MMX under 64-bit, since SSE2 is available}
@@ -1478,17 +1494,6 @@ interface
 {$define FASTMM4_ALLOW_INLINES}
 {$endif}
 
-{$ifdef EnableAsmCodeAlign}
-  {$ifndef FPC}
-    { FreePascal doesn't support .align }
-    { Delphi 64-bit or 32-bit incorrectly encodes conditional jumps in Assembly}
-    { (used 6-byte instructions instead of just 2 bytes) }
-    { So don't use it for Borland (Embarcadero) Delphi neither for FreePascal}
-      {$define AsmCodeAlign}
-  {$endif}
-{$endif EnableAsmCodeAlign}
-
-
 {$ifdef DisableAVX512}
 {$undef EnableAVX512}
 {$else}
@@ -1511,9 +1516,7 @@ of just one option: "Boolean short-circuit evaluation".}
 
   {$BOOLEVAL OFF}
 
-
 {$ifdef FullDebugMode}
-
 
         {The stack framce force copmiler option should be ON for
         the FullDebugMode, otherwise the stack unmangling may not work
@@ -1528,14 +1531,14 @@ of just one option: "Boolean short-circuit evaluation".}
   {$IFNDEF FPC}
   {$CODEALIGN 16}
   {$ENDIF}
-  {$IFDEF FPC
+  {$IFDEF FPC}
   {$CODEALIGN PROC=32}
   {$CODEALIGN JUMP=16}
   {$CODEALIGN LOOP=8}
   {$ENDIF}
 {$endif}
 
-{$ifndef AsmVersion
+{$ifndef AsmVersion}
   {$undef CheckPauseAndSwitchToThreadForAsmVersion}
 {$endif}
 
@@ -1641,22 +1644,19 @@ of just one option: "Boolean short-circuit evaluation".}
 {$define AuxAsmRoutines}
 {$endif}
 
-
-{-------------------------Public constants-----------------------------}
-const
-  {The current version of FastMM4-AVX}
-  FastMM4AvxVersion = '1.05';
-  {The number of small block types}
-
-{$ifdef Align32Bytes}
-  NumSmallBlockTypes = 44;
-{$else}
-{$ifdef Align16Bytes}
-  NumSmallBlockTypes = 46;
-{$else}
-  NumSmallBlockTypes = 56;
+{$ifdef EnableAsmCodeAlign}
+  {$ifdef FPC}
+    {$define ForceAsmCodeAlign}
+  {$endif}
 {$endif}
+
+{$ifdef ForceAsmCodeAlign}
+  {$define AsmCodeAlign}
+  {$ifdef FPC}
+     {$define AsmAlNodot}
+  {$endif}
 {$endif}
+
 
 {$ifdef Align16bytes}
 {$define AlignAtLeast16Bytes}
@@ -1666,9 +1666,48 @@ const
 {$define AlignAtLeast16Bytes}
 {$endif}
 
-{$ifdef Align32bytes}
-{$ifdef 32bit}
-   {$Message Fatal '32-bit alignment is not supportd for 32-byte targets'}
+{$ifdef FPC}
+  {$ifdef PurePascal}
+    {$define SynchroVarLongint}
+  {$endif}
+{$endif}
+
+{$ifdef 64bit}
+  {$define AllowFreeBlockLater}
+{$endif}
+
+{$ifdef SynchroVarLongint}
+  {$undef AllowFreeBlockLater}
+{$endif}
+
+{$ifdef PurePascal}
+  {$undef AsmVersion}
+  {$undef AuxAsmRoutines}
+  {$define DisablePauseAndSwitchToThread}
+{$endif}
+
+{$ifdef XE2AndUp}
+  {$define OperatorsInDefinesSupported}
+{$endif}
+
+{$ifdef FPC}
+  {$define OperatorsInDefinesSupported}
+{$endif}
+
+
+{-------------------------Public constants-----------------------------}
+const
+  {The current version of FastMM4-AVX}
+  FastMM4AvxVersion = '1.06';
+  {The number of small block types}
+
+{$ifdef Align32Bytes}
+  NumSmallBlockTypes = 40;
+{$else}
+{$ifdef Align16Bytes}
+  NumSmallBlockTypes = 46;
+{$else}
+  NumSmallBlockTypes = 56;
 {$endif}
 {$endif}
 
@@ -2171,12 +2210,15 @@ procedure Move68(const ASource; var ADest; ACount: NativeInt); forward;
 {These are not needed and thus unimplemented under 32-bit}
 {$ifndef ExcludeSmallGranularMoves}
 procedure Move8(const ASource; var ADest; ACount: NativeInt); forward;
+procedure Move16(const ASource; var ADest; ACount: NativeInt); forward;
 {$endif}
 procedure Move24(const ASource; var ADest; ACount: NativeInt); forward;
 {$ifndef ExcludeSmallGranularMoves}
 procedure Move40(const ASource; var ADest; ACount: NativeInt); forward;
+procedure Move48(const ASource; var ADest; ACount: NativeInt); forward;
 {$endif}
 procedure Move56(const ASource; var ADest; ACount: NativeInt); forward;
+procedure Move64(const ASource; var ADest; ACount: NativeInt); forward;
 {$endif}
 
 {$endif UseCustomFixedSizeMoveRoutines}
@@ -2194,18 +2236,15 @@ function InvalidRegisterAndUnRegisterMemoryLeak(APointer: Pointer): Boolean; for
 
 const
   {The size of a medium block pool. This is allocated through VirtualAlloc and
-   is used to serve medium blocks. The size must be a multiple of 16 (or 32, depending on alignment) and at
-   least 4 bytes less than a multiple of 4K (the page size) to prevent a
-   possible read access violation when reading past the end of a memory block
-   in the optimized move routine (MoveX16LP/MoveX32LP). In Full Debug mode we leave a
-   trailing 256 bytes to be able to safely do a memory dump.}
+   is used to serve medium blocks. The size must be a multiple of 16 and at
+   least "SizeOf(Pointer)" bytes less than a multiple of 4K (the page size) to
+   prevent a possible read access violation when reading past the end of a
+   memory block in the optimized move routine (MoveX16LP/MoveX32LP).
+   In Full Debug mode we leave a trailing 256 bytes to be able to safely
+   do a memory dump.}
   MediumBlockPoolSize = 20 * 64 * 1024 -
   {$ifndef FullDebugMode}
-    {$ifdef Align32Bytes}
-      32
-    {$else}
-      16
-    {$endif}
+       16
   {$else}
       256
   {$endif};
@@ -2238,11 +2277,7 @@ const
   MediumBlockGranularityPowerOf2 = 8;
   MediumBlockGranularity = UnsignedBit shl MediumBlockGranularityPowerOf2;
   MediumBlockGranularityMask = NativeUInt(-NativeInt(MediumBlockGranularity));
-{$ifdef Align32Bytes}
-  MediumBlockSizeOffset = 64;
-{$else}
   MediumBlockSizeOffset = 48;
-{$endif}
 
   {The granularity of large blocks}
   LargeBlockGranularity = 65536;
@@ -2259,6 +2294,13 @@ const
   {The smallest medium block size. (Medium blocks are rounded up to the nearest
    multiple of MediumBlockGranularity plus MediumBlockSizeOffset)}
   MinimumMediumBlockSize = 11 * MediumBlockGranularity + MediumBlockSizeOffset;
+
+  {$ifdef OperatorsInDefinesSupported}
+    {$if (MaximumSmallBlockSize mod SmallBlockGranularity) <> 0 }
+      {$Message Fatal 'Invalid MaximumSmallBlockSize granularity'}
+    {$ifend}
+  {$endif}
+
   {The number of bins reserved for medium blocks}
   MediumBlockBinsPerGroupPowerOf2 = 5;
   {Must be a power of 2, otherwise masks would not work}
@@ -2303,18 +2345,13 @@ const
    one chunk allocated through VirtualAlloc? (Only used by large blocks.)}
   LargeBlockIsSegmented = 8;
   {The flags masks for small blocks}
-  DropSmallFlagsMask = -8;
+  DropSmallFlagsMask = NativeUint(-8);
   {$ifdef CheckHeapForCorruption}
-  ExtractSmallFlagsMask = 7;
+  ExtractSmallFlagsMask = NativeUint(7);
   {$endif}
   {The flags masks for medium and large blocks}
-{$ifdef Align32Bytes}
-  DropMediumAndLargeFlagsMask = -32;
-  ExtractMediumAndLargeFlagsMask = 31;
-{$else}
-  DropMediumAndLargeFlagsMask = -16;
-  ExtractMediumAndLargeFlagsMask = 15;
-{$endif}
+  DropMediumAndLargeFlagsMask = NativeUint(-16);
+  ExtractMediumAndLargeFlagsMask = NativeUint(15);
   {-------------Block resizing constants---------------}
   {The upsize and downsize checker must a a multiple of the granularity,
    otherwise on big-granularity and small upsize/downsize constant values,
@@ -2425,11 +2462,15 @@ type
     mltExpectedLeakRegisteredByClass, mltExpectedLeakRegisteredBySize);
 {$endif}
 
-  TVolatileByte =
-  {$ifdef XE2AndUp}
-    System.ShortInt
+  TSynchronizationVariable =
+  {$ifdef SynchroVarLongint}
+    LongInt
   {$else}
-    Byte
+    {$ifdef XE2AndUp}
+      System.ShortInt
+    {$else}
+      Byte
+    {$endif}
   {$endif}
   ;
 
@@ -2443,13 +2484,16 @@ type
   TSmallBlockType = record
     {True = Block type is locked}
 
-    SmallBlockTypeLocked: TVolatileByte; {The type is Byte for strict
+    SmallBlockTypeLocked: TSynchronizationVariable; {The type is Byte for strict
 				type checking when the typed "@" operator
 				compiler option is ON.}
 
     {Bitmap indicating which of the first 8 medium block groups contain blocks
      of a suitable size for a block pool.}
     AllowedGroupsForBlockPoolBitmap: Byte;
+{$ifdef SynchroVarLongint}
+    Reserved2: Byte;
+{$endif}
     {The block size for this block type}
     BlockSize: Word;
     {The minimum and optimal size of a small block pool for this block type}
@@ -2474,11 +2518,18 @@ type
      that often) the variable size move routine is used.}
     UpsizeMoveProcedure: TMoveProc;
 {$else}
+    {$ifndef SynchroVarLongint}
     Reserved1: Pointer;
+    {$endif}
 {$endif}
-{$ifdef 64Bit}
+{$ifdef AllowFreeBlockLater}
     FreeBlockLater: Pointer; // if we cannot free a block due to a lock, we save it here and try again later
+{$else}
+    {$ifdef 64bit}
+    Reserved3: Pointer;
+    {$endif}
 {$endif}
+
 {$ifdef UseReleaseStack}
     ReleaseStack: array [0..NumStacksPerBlock - 1] of TLFStack;
 {$endif}
@@ -2487,8 +2538,7 @@ type
 {$endif}
   end;
 
-  {Small block pool (Size = 32 bytes for 32-bit, 48 bytes for 64-bit,
-  or 64 bytes when we have Align32Bytes).}
+  {Small block pool (Size = 32 bytes for 32-bit, 48 bytes for 64-bit).}
   TSmallBlockPoolHeader = record
     {BlockType}
     BlockType: PSmallBlockType;
@@ -2511,9 +2561,6 @@ type
     Reserved2: Cardinal;
     {The pool pointer and flags of the first block}
     FirstBlockPoolPointerAndFlags: NativeUInt;
-{$ifdef Align32Bytes}
-    Reserver3, Reserved4: Int64;
-{$endif}
   end;
 
   {Small block layout:
@@ -2544,7 +2591,7 @@ type
    Offset: 0 = User data / Previous Free Block (if this block is free)
    Offset: SizeOf(Pointer) = Next Free Block (if this block is free)
    Offset: BlockSize - 2*SizeOf(Pointer) = Size of this block (if this block is free)
-   Offset: BlockSize - SizeOf(Pointer) = Size of the next block and flags
+   Offset: BlockSize - SizeOf(Pointer) = Size of the next block and flags}
 
   {A medium block that is unused}
   PMediumFreeBlock = ^TMediumFreeBlock;
@@ -2615,15 +2662,11 @@ const
   MediumFreeBlockSizePowerOf2 = 4;
   {$endif}
 
-  {$ifdef XE2AndUp}
-    {$if 1 shl MediumFreeBlockSizePowerOf2  <> SizeOf(TMediumFreeBlock)}
-      {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
-        {$Message Fatal 'Invalid MediumFreeBlockSizePowerOf2 constant or SizeOf(TMediumFreeBlock) is not a power of 2'}
-      {$endif}
+  {$ifdef OperatorsInDefinesSupported}
+    {$if 1 shl MediumFreeBlockSizePowerOf2 <> SizeOf(TMediumFreeBlock)}
+      {$Message Fatal 'Invalid MediumFreeBlockSizePowerOf2 constant or SizeOf(TMediumFreeBlock) is not a power of 2'}
     {$ifend}
   {$endif}
-
-
 
 {$ifndef LogLockContention}
   {$define SmallBlockTypeRecSizeIsPowerOf2}
@@ -2638,13 +2681,13 @@ const
     SmallBlockTypeRecSizePowerOf2 = 5;
   {$endif}
   {$ifdef 64bit}
-	SmallBlockTypeRecSizePowerOf2 = 6;
+    SmallBlockTypeRecSizePowerOf2 = 6;
   {$endif}
   SmallBlockTypeRecSize = Byte(UnsignedBit shl SmallBlockTypeRecSizePowerOf2);
 {$endif}
 
 {$ifndef UseReleaseStack}
-  {$ifdef XE2AndUp}
+  {$ifdef OperatorsInDefinesSupported}
     {$if SmallBlockTypeRecSize <> SizeOf(TSmallBlockType)}
       {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
         {$Message Fatal 'Invalid SmallBlockTypeRecSizePowerOf2 constant or SizeOf(TSmallBlockType) is not a power of 2'}
@@ -2659,10 +2702,35 @@ const
 {$endif}
   {The size of the block header in front of small and medium blocks}
   BlockHeaderSize = SizeOf(Pointer);
-  {The size of a small block pool header}
+
+  {The size of a small block pool header: 32 bytes for 32-bit, 48 bytes for 64-bit).}
   SmallBlockPoolHeaderSize = SizeOf(TSmallBlockPoolHeader);
-  {The size of a medium block pool header}
+  {$ifdef OperatorsInDefinesSupported}
+    {$ifdef 32bit}
+    {$if SmallBlockPoolHeaderSize <> 32}
+       {$Message Fatal 'SmallBlockPoolHeaderSize should be 32 bytes for 32-bit'}
+    {$ifend}
+    {$else}
+    {$if SmallBlockPoolHeaderSize <> 48}
+       {$Message Fatal 'SmallBlockPoolHeaderSize should be 48 bytes for 64-bit'}
+    {$ifend}
+    {$endif}
+  {$endif}
+
+  {The size of a medium block pool header: 16 bytes for 32-bit and 32 bytes for 64-bit.}
   MediumBlockPoolHeaderSize = SizeOf(TMediumBlockPoolHeader);
+  {$ifdef OperatorsInDefinesSupported}
+    {$ifdef 32bit}
+    {$if MediumBlockPoolHeaderSize <> 16}
+       {$Message Fatal 'MediumBlockPoolHeaderSize should be 16 bytes for 32-bit'}
+    {$ifend}
+    {$else}
+    {$if MediumBlockPoolHeaderSize <> 32}
+       {$Message Fatal 'MediumBlockPoolHeaderSize should be 32 bytes for 64-bit'}
+    {$ifend}
+    {$endif}
+  {$endif}
+
   {The size of the header in front of Large blocks}
   LargeBlockHeaderSize = SizeOf(TLargeBlockHeader);
 {$ifdef FullDebugMode}
@@ -2726,166 +2794,7 @@ var
   {The small block types. Sizes include the leading header. Sizes are
    picked to limit maximum wastage to about 10% or 256 bytes (whichever is
    less) where possible.}
-  SmallBlockTypes: array[0..NumSmallBlockTypes - 1] of TSmallBlockType =(
-    {8/16 byte jumps}
-
-{$ifndef Align32Bytes}
-{$ifndef Align16Bytes}
-    (BlockSize: 8 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move4{$else}nil{$endif}{$endif}),
-{$endif Align16Bytes}
-    (BlockSize: 16 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move12{$else}Move8{$endif}{$endif}),
-{$ifndef Align16Bytes}
-    (BlockSize: 24 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move20{$else}Move16{$endif}{$endif}),
-{$endif Align16Bytes}
-{$endif Align32Bytes}
-
-    (BlockSize: 32 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move28{$else}Move24{$endif}{$endif}),
-
-{$ifndef Align32Bytes}
-{$ifndef Align16Bytes}
-    (BlockSize: 40 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move36{$else}Move32{$endif}{$endif}),
-{$endif}
-    (BlockSize: 48 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move44{$else}Move40{$endif}{$endif}),
-{$ifndef Align16Bytes}
-    (BlockSize: 56 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move52{$else}Move48{$endif}{$endif}),
-{$endif}
-{$endif}
-
-    (BlockSize: 64 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32Bit}Move60{$else}Move56{$endif}{$endif}),
-
-{$ifndef Align32Bytes}
-{$ifndef Align16Bytes}
-    (BlockSize: 72 {$ifdef UseCustomFixedSizeMoveRoutines}; UpsizeMoveProcedure: {$ifdef 32bit}Move68{$else}Move64{$endif}{$endif}),
-{$endif}
-    (BlockSize: 80),
-{$ifndef Align16Bytes}
-    (BlockSize: 88),
-{$endif}
-{$endif}
-
-    (BlockSize: 96),
-
-{$ifndef Align32Bytes}
-
-{$ifndef Align16Bytes}
-    (BlockSize: 104),
-{$endif}
-    (BlockSize: 112),
-{$ifndef Align16Bytes}
-    (BlockSize: 120),
-{$endif}
-{$endif}
-
-    (BlockSize: 128),
-
-{$ifndef Align32Bytes}
-{$ifndef Align16Bytes}
-    (BlockSize: 136),
-{$endif}
-    (BlockSize: 144),
-{$ifndef Align16Bytes}
-    (BlockSize: 152),
-{$endif}
-{$endif}
-
-    (BlockSize: 160),
-    {16 byte jumps}
-{$ifndef Align32Bytes}
-    (BlockSize: 176),
-{$endif}
-    (BlockSize: 192),
-{$ifndef Align32Bytes}
-    (BlockSize: 208),
-{$endif}
-    (BlockSize: 224),
-{$ifndef Align32Bytes}
-    (BlockSize: 240),
-{$endif}
-    (BlockSize: 256),
-{$ifndef Align32Bytes}
-    (BlockSize: 272),
-{$endif}
-    (BlockSize: 288),
-{$ifndef Align32Bytes}
-    (BlockSize: 304),
-{$endif}
-    (BlockSize: 320),
-    {32 byte jumps}
-    (BlockSize: 352),
-    (BlockSize: 384),
-    (BlockSize: 416),
-    (BlockSize: 448),
-    (BlockSize: 480),
-{$ifndef Align32Bytes}
-    {48 byte jumps if alignment is less than 32 bytes}
-    (BlockSize: 528),
-    (BlockSize: 576),
-    (BlockSize: 624),
-    (BlockSize: 672),
-    {64 byte jumps}
-    (BlockSize: 736),
-    (BlockSize: 800),
-    {80 byte jumps if alignment is less than 32 bytes}
-    (BlockSize: 880),
-    (BlockSize: 960),
-    {96 byte jumps}
-    (BlockSize: 1056),
-    (BlockSize: 1152),
-    {112 byte jumps}
-    (BlockSize: 1264),
-    (BlockSize: 1376),
-    {128 byte jumps}
-    (BlockSize: 1504),
-    {144 byte jumps}
-    (BlockSize: 1648),
-    {160 byte jumps}
-    (BlockSize: 1808),
-    {176 byte jumps}
-    (BlockSize: 1984),
-    {192 byte jumps}
-    (BlockSize: 2176),
-    {208 byte jumps}
-    (BlockSize: 2384),
-    {224 byte jumps}
-{$else}
-    {keep 32-byte jumps if alignment is 32 bytes}
-    (BlockSize:  512),
-    (BlockSize:  544),
-    (BlockSize:  576),
-    (BlockSize:  608),
-    (BlockSize:  640),
-    (BlockSize:  672),
-    (BlockSize:  704),
-    (BlockSize:  736),
-    (BlockSize:  768),
-    (BlockSize:  800),
-    (BlockSize:  832),
-    {64 byte jumps}
-    (BlockSize:  896),
-    (BlockSize:  960),
-    (BlockSize:  1024),
-    (BlockSize:  1088),
-    (BlockSize:  1152),
-    (BlockSize:  1216),
-    (BlockSize:  1280),
-    (BlockSize:  1344),
-    (BlockSize:  1408),
-    {128 byte jumps}
-    (BlockSize:  1536),
-    (BlockSize:  1664),
-    (BlockSize:  1792),
-    (BlockSize:  1920),
-    (BlockSize:  2048),
-    {256 byte jumps}
-    (BlockSize:   2304),
-{$endif}
-    (BlockSize: MaximumSmallBlockSize),
-    {The last block size occurs three times. If, during a GetMem call, the
-     requested block size is already locked by another thread then up to two
-     larger block sizes may be used instead. Having the last block size occur
-     three times avoids the need to have a size overflow check.}
-    (BlockSize: MaximumSmallBlockSize),
-    (BlockSize: MaximumSmallBlockSize));
+  SmallBlockTypes: array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
 
   {Size to small block type translation table.
    This table helps us to quickly access a corresponding TSmallBlockType entry in the
@@ -2931,7 +2840,7 @@ var
   MediumBlockPoolsCircularList: TMediumBlockPoolHeader;
 
   {Are medium blocks locked?}
-  MediumBlocksLocked: TVolatileByte;
+  MediumBlocksLocked: TSynchronizationVariable;
 {$ifdef MediumBlocksLockedCriticalSection}
   MediumBlocksLockedCS: TRTLCriticalSection;
 {$endif}
@@ -2953,7 +2862,7 @@ var
   MediumBlockBins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   {-----------------Large block management------------------}
   {Are large blocks locked?}
-  LargeBlocksLocked: TVolatileByte;
+  LargeBlocksLocked: TSynchronizationVariable;
 {$ifdef LargeBlocksLockedCriticalSection}
   LargeBlocksLockedCS: TRTLCriticalSection;
 {$endif}
@@ -2964,7 +2873,7 @@ var
 {$ifdef EnableMemoryLeakReporting}
   {The expected memory leaks}
   ExpectedMemoryLeaks: PExpectedMemoryLeaks;
-  ExpectedMemoryLeaksListLocked: TVolatileByte;
+  ExpectedMemoryLeaksListLocked: TSynchronizationVariable;
 {$endif}
   {---------------------EventLog-------------------}
 {$ifdef _EventLog}
@@ -3026,16 +2935,7 @@ var
   NewMemoryManager: {$ifndef BDS2006AndUp}TMemoryManager{$else}TMemoryManagerEx{$endif};
 {$ifdef DetectMMOperationsAfterUninstall}
   {Invalid handlers to catch MM operations after uninstall}
-  InvalidMemoryManager: {$ifndef BDS2006AndUp}TMemoryManager{$else}TMemoryManagerEx{$endif} = (
-    GetMem: InvalidGetMem;
-    FreeMem: InvalidFreeMem;
-    ReallocMem: InvalidReallocMem
-  {$ifdef BDS2006AndUp};
-    AllocMem: InvalidAllocMem;
-    RegisterExpectedMemoryLeak: InvalidRegisterAndUnRegisterMemoryLeak;
-    UnRegisterExpectedMemoryLeak: InvalidRegisterAndUnRegisterMemoryLeak;
-  {$endif}
-  );
+  InvalidMemoryManager: {$ifndef BDS2006AndUp}TMemoryManager{$else}TMemoryManagerEx{$endif};
 {$endif}
 
 {$ifdef MMSharingEnabled}
@@ -3100,7 +3000,7 @@ asm
   {Word align}
   add eax, 1
   and eax, -2
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @ScanLoop:
   mov cx, [eax]
   add eax, 2
@@ -3112,11 +3012,11 @@ asm
   jnz @ScanLoop
   lea eax, [eax + edx - 1]
   jmp @Finish
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @ReturnLess2:
   lea eax, [eax + edx - 2]
   jmp @Finish
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @ZeroLength:
   xor eax, eax
 @Finish:
@@ -3265,12 +3165,14 @@ const
 // the spin-wait loop count for the "test, test-and-set" technique, details are in the comment section at the beginning of the file
   cSpinWaitLoopCount = 5000;
 
+{$ifndef PurePascal}
 {$define UseNormalLoadBeforeAcquireLock}
+{$endif}
 
 {$ifdef SimplifiedInterlockedExchangeByte}
 
 {$ifdef UseNormalLoadBeforeAcquireLock}
-function AcquireLockTryNormalLoadFirst(var Target: TVolatileByte): TVolatileByte; assembler;
+function AcquireLockTryNormalLoadFirst(var Target: TSynchronizationVariable): TSynchronizationVariable; assembler;
 asm
 {$ifdef 32bit}
   {On entry:
@@ -3306,10 +3208,16 @@ asm
 @Exit:
 end;
 {$else}
-function InterlockedExchangeByte(var Target: TVolatileByte; const Value: TVolatileByte): TVolatileByte;
+function InterlockedExchangeByte(var Target: TSynchronizationVariable; const Value: TSynchronizationVariable): TSynchronizationVariable;
 {$ifndef ASMVersion}
 begin
-  Result := Windows.InterlockedExchange8(Target, Value);
+  Result :=
+  {$ifdef SynchroVarLongint}
+  InterlockedExchange
+  {$else}
+  Windows.InterlockedExchange8
+  {$endif}
+  (Target, Value);
 end;
 {$else ASMVersion}
 assembler;
@@ -3352,7 +3260,7 @@ of FastMM4 version 4.992. }
 {Compare [AAddress], CompareVal:
  If Equal: [AAddress] := NewVal and result = CompareVal
  If Unequal: Result := [AAddress]}
-function InterlockedCompareExchangeByte(const CompareVal, NewVal: TVolatileByte; var Target: TVolatileByte): TVolatileByte; {$ifdef fpc64bit}assembler; nostackframe;{$endif}
+function InterlockedCompareExchangeByte(const CompareVal, NewVal: TSynchronizationVariable; var Target: TSynchronizationVariable): TSynchronizationVariable; assembler; {$ifdef fpc64bit}nostackframe;{$endif}
 asm
 {$ifdef 32Bit}
   {On entry:
@@ -3467,12 +3375,12 @@ asm
   {$ifdef AllowAsmNoframe}
   .noframe
   {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Init:
    mov  r9d, cSpinWaitLoopCount
    mov  eax, cLockByteLocked
    jmp  @FirstCompare
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  r9
@@ -3497,12 +3405,12 @@ asm
    jmp  @Init
 @Finish:
 {$else}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Init:
    mov  edx, cSpinWaitLoopCount
    mov  eax, cLockByteLocked
    jmp  @FirstCompare
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -3523,7 +3431,7 @@ asm
 end;
 
 
-procedure AcquireSpinLockByte(var Target: TVolatileByte); assembler;
+procedure AcquireSpinLockByte(var Target: TSynchronizationVariable); assembler;
 asm
 {$ifdef 64bit}
   {$ifdef AllowAsmNoframe}
@@ -3532,12 +3440,12 @@ asm
   {$ifdef unix}
    mov  rcx, rdi
   {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Init:
    mov  r9d, cSpinWaitLoopCount
    mov  eax, cLockByteLocked
    jmp  @FirstCompare
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  r9
@@ -3559,12 +3467,12 @@ asm
 @Finish:
 {$else}
    mov  ecx, eax
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Init:
    mov  edx, cSpinWaitLoopCount
    mov  eax, cLockByteLocked
    jmp  @FirstCompare
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -3589,7 +3497,7 @@ end;
 {$endif DisablePauseAndSwitchToThread}
 
 
-function AcquireLockByte(var Target: TVolatileByte): Boolean;
+function AcquireLockByte(var Target: TSynchronizationVariable): Boolean;
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 var
   R: Byte;
@@ -3629,7 +3537,7 @@ at the beginning of the file for the discussion on releasing locks on data
 structures. You can also define the "InterlockedRelease" option in the
 FastMM4Options.inc file to get the old behaviour of the origina FastMM4. }
 
-procedure ReleaseLockByte(var Target: TVolatileByte);
+procedure ReleaseLockByte(var Target: TSynchronizationVariable);
 
   {$ifndef DEBUG}{$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}{$endif}
 
@@ -3842,10 +3750,9 @@ end;
 
 {$ifdef UseCustomFixedSizeMoveRoutines}
 
-
 {$ifdef 64bit}
 
-procedure Move24Reg64(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move24Reg64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   mov rax, [rcx + 0*8]
@@ -3864,8 +3771,91 @@ asm
   {$endif}
 end;
 
+procedure Move32Reg64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+  {$ifndef unix}
+  mov rax, [rcx + 0*8]
+  mov r8,  [rcx + 1*8]
+  mov r9,  [rcx + 2*8]
+  mov r10, [rcx + 3*8]
+  mov [rdx + 0*8], rax
+  mov [rdx + 1*8], r8
+  mov [rdx + 2*8], r9
+  mov [rdx + 3*8], r10
+  {$else}
+  mov rax, [rdi + 0*8]
+  mov rdx, [rdi + 1*8]
+  mov rcx, [rdi + 2*8]
+  mov r8,  [rdi + 3*8]
+  mov [rsi + 0*8], rax
+  mov [rsi + 1*8], rdx
+  mov [rsi + 2*8], rcx
+  mov [rsi + 3*8], r8
+  {$endif}
+end;
 
-procedure Move56Reg64(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+
+procedure Move40Reg64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+  {$ifndef unix}
+  mov rax, [rcx + 0*8]
+  mov r8,  [rcx + 1*8]
+  mov r9,  [rcx + 2*8]
+  mov r10, [rcx + 3*8]
+  mov r11, [rcx + 4*8]
+  mov [rdx + 0*8], rax
+  mov [rdx + 1*8], r8
+  mov [rdx + 2*8], r9
+  mov [rdx + 3*8], r10
+  mov [rdx + 4*8], r11
+  {$else}
+  mov rax, [rdi + 0*8]
+  mov rdx, [rdi + 1*8]
+  mov rcx, [rdi + 2*8]
+  mov r8,  [rdi + 3*8]
+  mov r9,  [rdi + 4*8]
+  mov [rsi + 0*8], rax
+  mov [rsi + 1*8], rdx
+  mov [rsi + 2*8], rcx
+  mov [rsi + 3*8], r8
+  mov [rsi + 4*8], r9
+  {$endif}
+end;
+
+
+procedure Move48Reg64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+  {$ifndef unix}
+  mov rax, [rcx + 0*8]
+  mov r8,  [rcx + 1*8]
+  mov r9,  [rcx + 2*8]
+  mov r10, [rcx + 3*8]
+  mov [rdx + 0*8], rax
+  mov [rdx + 1*8], r8
+  mov [rdx + 2*8], r9
+  mov [rdx + 3*8], r10
+  mov rax, [rcx + 4*8]
+  mov r8,  [rcx + 5*8]
+  mov [rdx + 4*8], rax
+  mov [rdx + 5*8], r8
+  {$else}
+  mov rax, [rdi + 0*8]
+  mov rdx, [rdi + 1*8]
+  mov rcx, [rdi + 2*8]
+  mov r8,  [rdi + 3*8]
+  mov [rsi + 0*8], rax
+  mov [rsi + 1*8], rdx
+  mov [rsi + 2*8], rcx
+  mov [rsi + 3*8], r8
+  mov rax, [rdi + 4*8]
+  mov rdx, [rdi + 5*8]
+  mov [rsi + 4*8], rax
+  mov [rsi + 5*8], rdx
+  {$endif}
+end;
+
+
+procedure Move56Reg64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   mov rax, [rcx + 0*8]
@@ -3900,6 +3890,7 @@ asm
   {$endif}
 end;
 
+{$endif}
 
 {$ifdef EnableAVX}
 
@@ -3910,7 +3901,7 @@ end;
 
 {----------------------------AVX1 Move Procedures----------------------------}
 
-procedure Move24AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move24AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -3934,7 +3925,7 @@ asm
 end;
 
 
-procedure Move56AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move56AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -3962,7 +3953,7 @@ asm
   db $C5, $F8, $77           // vzeroupper
 end;
 
-procedure Move88AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move88AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -3995,7 +3986,7 @@ asm
   db $C5, $F8, $77           // vzeroupper
 end;
 
-procedure Move120AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move120AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4040,7 +4031,7 @@ on most CPUs}
   db $C5, $F8, $77           // vzeroupper
 end;
 
-procedure Move152AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move152AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4096,7 +4087,7 @@ less, by "add rcx", but it pays up later}
   db $C5, $F8, $77           // vzeroupper
 end;
 
-procedure Move184AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move184AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4152,7 +4143,7 @@ be in range -127..+127, see explanation at the Move152AVX1 routine}
   db $C5, $F8, $77           // vzeroupper
 end;
 
-procedure Move216AVX1(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move216AVX1(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4238,7 +4229,7 @@ end;
 
 {----------------------------AVX2 Move Procedures----------------------------}
 
-procedure Move24AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move24AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4257,7 +4248,7 @@ asm
   db $C5, $F9, $EF, $C0 // vpxor xmm0,xmm0,xmm0
 end;
 
-procedure Move56AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move56AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4281,7 +4272,7 @@ asm
   db $C5, $F1, $EF, $C9      // vpxor xmm1, xmm1, xmm1
 end;
 
-procedure Move88AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move88AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4310,7 +4301,7 @@ asm
   db $C5, $E9, $EF, $D2      // vpxor xmm2,xmm2,xmm2
 end;
 
-procedure Move120AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move120AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4344,7 +4335,7 @@ asm
   db $C5, $E1, $EF, $DB      // vpxor xmm3,xmm3,xmm3
 end;
 
-procedure Move152AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move152AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4387,7 +4378,7 @@ asm
   db $C5, $D9, $EF, $E4      // vpxor xmm4,xmm4,xmm4
 end;
 
-procedure Move184AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move184AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4435,7 +4426,7 @@ asm
   db $C5, $D1, $EF, $ED      // vpxor xmm5,xmm5,xmm5
 end;
 
-procedure Move216AVX2(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move216AVX2(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -4540,7 +4531,7 @@ procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); 
 
 {$ifndef ExcludeSmallGranularMoves}
 
-procedure Move4(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move4(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   mov eax, [eax]
@@ -4558,7 +4549,7 @@ asm
 end;
 
 {$ifdef 64Bit}
-procedure Move8(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move8(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifndef unix}
 .noframe
@@ -4569,9 +4560,60 @@ asm
   mov [rsi], rax
 {$endif}
 end;
-{$endif}
 
-procedure Move12(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move16(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+{$ifndef unix}
+.noframe
+  mov rax, [rcx]
+  mov rcx, [rcx+8]
+  mov [rdx], rax
+  mov [rdx+8], rcx
+{$else}
+  mov rax, [rdi]
+  mov rdi, [rdi+8]
+  mov [rsi], rax
+  mov [rsi+8], rdi
+{$endif}
+end;
+
+
+procedure Move32(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  {$ifndef unix}
+  .noframe
+    movdqa xmm0, [rcx]
+    movdqa xmm1, [rcx+16]
+    movdqa [rdx], xmm0
+    movdqa [rdx+16], xmm1
+  {$else}
+    movdqa xmm0, [rdi]
+    movdqa xmm1, [rdi+16]
+    movdqa [rsi], xmm0
+    movdqa [rsi+16], xmm1
+  {$endif}
+{$else}
+  {$ifndef unix}
+  .noframe
+    movdqu xmm0, [rcx]
+    movdqu xmm1, [rcx+16]
+    movdqu [rdx], xmm0
+    movdqu [rdx+16], xmm1
+  {$else}
+    movdqu xmm0, [rdi]
+    movdqu xmm1, [rdi+16]
+    movdqu [rsi], xmm0
+    movdqu [rsi+16], xmm1
+  {$endif}
+{$endif}
+    xorps xmm0, xmm0
+    xorps xmm1, xmm1
+end;
+
+{$endif 64bit}
+
+procedure Move12(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   mov ecx, [eax]
@@ -4598,7 +4640,7 @@ end;
 
 
 {$ifdef 32Bit}
-procedure Move20_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move20_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -4615,7 +4657,7 @@ asm
 end;
 {$endif}
 
-procedure Move20(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move20(const ASource; var ADest; ACount: NativeInt); assembler;{$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   mov ecx, [eax]
@@ -4629,6 +4671,7 @@ asm
   mov [edx + 12], ecx
   mov [edx + 16], eax
 {$else}
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4641,15 +4684,32 @@ asm
   movdqa [rsi], xmm0
   mov [rsi + 16], edi
   {$endif}
+{$else AlignAtLeast16Bytes}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  mov ecx, [rcx + 16]
+  movdqu [rdx], xmm0
+  mov [rdx + 16], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  mov edi, [rdi + 16]
+  movdqu [rsi], xmm0
+  mov [rsi + 16], edi
+  {$endif}
 {$endif}
+  xorps xmm0, xmm0
+{$endif 32Bit}
 end;
 
 {$endif ExcludeSmallGranularMoves}
 
 
 {$ifdef 64bit}
-procedure Move24(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move24(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
+
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4664,6 +4724,22 @@ asm
   movdqa [rsi], xmm0
   mov [rsi + 16], rdx
   {$endif}
+{$else}
+  {$ifndef unix}
+  {$ifdef AllowAsmNoframe}
+  .noframe
+  {$endif}
+  movdqu xmm0, [rcx]
+  mov r8, [rcx + 16]
+  movdqu [rdx], xmm0
+  mov [rdx + 16], r8
+  {$else}
+  movdqu xmm0, [rdi]
+  mov rdx, [rdi + 16]
+  movdqu [rsi], xmm0
+  mov [rsi + 16], rdx
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
 end;
 {$endif 64bit}
@@ -4672,7 +4748,7 @@ end;
 {$ifndef ExcludeSmallGranularMoves}
 
 {$ifdef 32Bit}
-procedure Move28_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move28_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler;{$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -4690,7 +4766,7 @@ asm
 end;
 {$endif}
 
-procedure Move28(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move28(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   mov ecx, [eax]
@@ -4708,6 +4784,8 @@ asm
   mov [edx + 20], ecx
   mov [edx + 24], eax
 {$else}
+
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4724,12 +4802,30 @@ asm
   mov [rsi + 16], rdx
   mov [rsi + 24], edi
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  mov r8, [rcx + 16]
+  mov ecx, [rcx + 24]
+  movdqu [rdx], xmm0
+  mov [rdx + 16], r8
+  mov [rdx + 24], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  mov rdx, [rdi + 16]
+  mov edi, [rdi + 24]
+  movdqu [rsi], xmm0
+  mov [rsi + 16], rdx
+  mov [rsi + 24], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
 {$endif}
 end;
 
 {$ifdef 32Bit}
-procedure Move36_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move36_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -4751,7 +4847,7 @@ asm
 end;
 {$endif}
 
-procedure Move36(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move36(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   fild qword ptr [eax]
@@ -4765,6 +4861,8 @@ asm
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
 {$else}
+
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4781,14 +4879,33 @@ asm
   movdqa [rsi + 16], xmm1
   mov [rsi + 32], edi
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  mov ecx, [rcx + 32]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  mov [rdx + 32], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  mov edi, [rdi + 32]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  mov [rsi + 32], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
 {$endif}
 end;
 
 {$ifdef 64bit}
-procedure Move40(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move40(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4805,13 +4922,75 @@ asm
   movdqa [rsi + 16], xmm1
   mov [rsi + 32], rdx
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  mov r8, [rcx + 32]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  mov [rdx + 32], r8
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  mov rdx, [rdi + 32]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  mov [rsi + 32], rdx
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
 end;
+
+procedure Move48(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  {$ifndef unix}
+.noframe
+  movdqa xmm0, [rcx]
+  movdqa xmm1, [rcx + 16]
+  movdqa xmm2, [rcx + 32]
+  movdqa [rdx], xmm0
+  movdqa [rdx + 16], xmm1
+  movdqa [rdx + 32], xmm2
+  {$else}
+  movdqa xmm0, [rdi]
+  movdqa xmm1, [rdi + 16]
+  movdqa xmm2, [rdi + 32]
+  movdqa [rsi], xmm0
+  movdqa [rsi + 16], xmm1
+  movdqa [rsi + 32], xmm2
+  {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  {$endif}
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+end;
+
+
 {$endif}
 
 {$ifdef 32bit}
-procedure Move44_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move44_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -4834,7 +5013,7 @@ asm
 end;
 {$endif}
 
-procedure Move44(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move44(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   fild qword ptr [eax]
@@ -4850,6 +5029,8 @@ asm
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
 {$else}
+
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4870,6 +5051,28 @@ asm
   mov [rsi + 32], rdx
   mov [rsi + 40], edi
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  mov r8, [rcx + 32]
+  mov ecx, [rcx + 40]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  mov [rdx + 32], r8
+  mov [rdx + 40], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  mov rdx, [rdi + 32]
+  mov edi, [rdi + 40]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  mov [rsi + 32], rdx
+  mov [rsi + 40], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
 {$endif}
@@ -4877,7 +5080,7 @@ end;
 
 
 {$ifdef 32bit}
-procedure Move52_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move52_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -4904,7 +5107,7 @@ asm
 end;
 {$endif 32bit}
 
-procedure Move52(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move52(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   fild qword ptr [eax]
@@ -4922,6 +5125,7 @@ asm
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
 {$else}
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -4942,6 +5146,28 @@ asm
   movdqa [rsi + 32], xmm2
   mov [rsi + 48], edi
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  mov ecx, [rcx + 48]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  mov [rdx + 48], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  mov edi, [rdi + 48]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  mov [rsi + 48], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
   xorps xmm2, xmm2
@@ -4952,8 +5178,9 @@ end;
 
 
 {$ifdef 64bit}
-procedure Move56(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move56(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
   .noframe
@@ -4976,9 +5203,89 @@ asm
   movdqa [rsi + 32], xmm2
   mov [rsi + 48], rdx
   {$endif}
+{$else}
+  {$ifndef unix}
+  {$ifdef AllowAsmNoframe}
+  .noframe
+  {$endif}
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  mov r8, [rcx + 48]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  mov [rdx + 48], r8
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  mov rdx, [rdi + 48]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  mov [rsi + 48], rdx
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
   xorps xmm2, xmm2
+end;
+
+
+procedure Move64(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
+asm
+{$ifdef AlignAtLeast16Bytes}
+  {$ifndef unix}
+  {$ifdef AllowAsmNoframe}
+  .noframe
+  {$endif}
+  movdqa xmm0, [rcx]
+  movdqa xmm1, [rcx + 16]
+  movdqa xmm2, [rcx + 32]
+  movdqa xmm3, [rcx + 48]
+  movdqa [rdx], xmm0
+  movdqa [rdx + 16], xmm1
+  movdqa [rdx + 32], xmm2
+  movdqa [rdx + 48], xmm3
+  {$else}
+  movdqa xmm0, [rdi]
+  movdqa xmm1, [rdi + 16]
+  movdqa xmm2, [rdi + 32]
+  movdqa xmm3, [rdi + 48]
+  movdqa [rsi], xmm0
+  movdqa [rsi + 16], xmm1
+  movdqa [rsi + 32], xmm2
+  movdqa [rsi + 48], xmm3
+  {$endif}
+{$else}
+  {$ifndef unix}
+  {$ifdef AllowAsmNoframe}
+  .noframe
+  {$endif}
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  movdqu xmm3, [rcx + 48]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  movdqu [rdx + 48], xmm3
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  movdqu xmm3, [rdi + 48]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  movdqu [rsi + 48], xmm3
+  {$endif}
+{$endif}
+  xorps xmm0, xmm0
+  xorps xmm1, xmm1
+  xorps xmm2, xmm2
+  xorps xmm3, xmm3
 end;
 
 {$endif 64bit}
@@ -4986,7 +5293,7 @@ end;
 {$ifndef ExcludeSmallGranularMoves}
 
 {$ifdef 32bit}
-procedure Move60_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move60_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -5014,7 +5321,7 @@ asm
 end;
 {$endif 32bit}
 
-procedure Move60(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move60(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   fild qword ptr [eax]
@@ -5034,6 +5341,7 @@ asm
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
 {$else}
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -5058,6 +5366,32 @@ asm
   mov [rsi + 48], rdx
   mov [rsi + 56], edi
   {$endif}
+{$else}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  mov r8, [rcx + 48]
+  mov ecx, [rcx + 56]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  mov [rdx + 48], r8
+  mov [rdx + 56], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  mov rdx, [rdi + 48]
+  mov edi, [rdi + 56]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  mov [rsi + 48], rdx
+  mov [rsi + 56], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
   xorps xmm2, xmm2
@@ -5065,7 +5399,7 @@ asm
 end;
 
 {$ifdef 32Bit}
-procedure Move68_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move68_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -5097,7 +5431,7 @@ asm
 end;
 {$endif 32Bit}
 
-procedure Move68(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move68(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   fild qword ptr [eax]
@@ -5119,6 +5453,7 @@ asm
   fistp qword ptr [edx + 8]
   fistp qword ptr [edx]
 {$else 32Bit}
+{$ifdef AlignAtLeast16Bytes}
   {$ifndef unix}
 .noframe
   movdqa xmm0, [rcx]
@@ -5143,6 +5478,32 @@ asm
   movdqa [rsi + 48], xmm3
   mov [rsi + 64], edi
   {$endif}
+{$else AlignAtLeast16Bytes}
+  {$ifndef unix}
+.noframe
+  movdqu xmm0, [rcx]
+  movdqu xmm1, [rcx + 16]
+  movdqu xmm2, [rcx + 32]
+  movdqu xmm3, [rcx + 48]
+  mov ecx, [rcx + 64]
+  movdqu [rdx], xmm0
+  movdqu [rdx + 16], xmm1
+  movdqu [rdx + 32], xmm2
+  movdqu [rdx + 48], xmm3
+  mov [rdx + 64], ecx
+  {$else}
+  movdqu xmm0, [rdi]
+  movdqu xmm1, [rdi + 16]
+  movdqu xmm2, [rdi + 32]
+  movdqu xmm3, [rdi + 48]
+  mov edi, [rdi + 64]
+  movdqu [rsi], xmm0
+  movdqu [rsi + 16], xmm1
+  movdqu [rsi + 32], xmm2
+  movdqu [rsi + 48], xmm3
+  mov [rsi + 64], edi
+  {$endif}
+{$endif}
   xorps xmm0, xmm0
   xorps xmm1, xmm1
   xorps xmm2, xmm2
@@ -5151,7 +5512,7 @@ asm
 end;
 
 {$ifdef 32Bit}
-procedure Move76_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move76_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -5185,7 +5546,7 @@ end;
 {$endif 32Bit}
 
 {$ifdef 32bit}
-procedure Move84_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move84_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -5224,7 +5585,7 @@ end;
 
 
 {$ifdef 32Bit}
-procedure Move92_32bit_SSE(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure Move92_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
   movaps xmm0, [eax]
@@ -5264,11 +5625,8 @@ end;
 
 {$endif ExcludeSmallGranularMoves}
 
-{$endif UseCustomFixedSizeMoveRoutines}
 
 {$ifdef ASMVersion}
-
-
 procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); forward;
 
 
@@ -5276,12 +5634,13 @@ procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); forwar
  SizeOf(Pointer). Important note: Always moves at least 16 - SizeOf(Pointer)
  bytes (the minimum small block size with 16 byte alignment), irrespective of
  ACount.}
-procedure MoveX16LP(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX16LP(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-  jmp MoveWithErmsNoAVX
+  call MoveWithErmsNoAVX
+  jmp @Exit
 
 @NoERMS:
   {Make the counter negative based: The last 12 bytes are moved separately}
@@ -5296,7 +5655,7 @@ asm
   {Make the counter negative based: The last 12 bytes are moved separately}
   neg ecx
   jns @MMXMoveLast12
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MMXMoveLoop:
   {Move a 16 byte block}
   {$ifdef Delphi4or5}
@@ -5314,7 +5673,7 @@ asm
   {Are there another 16 bytes to move?}
   add ecx, 16
   js @MMXMoveLoop
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MMXMoveLast12:
   {Do the last 12 bytes}
   {$ifdef Delphi4or5}
@@ -5339,16 +5698,16 @@ asm
   emms
   {$endif Delphi4or5}
   {$ifndef ForceMMX}
-  ret
+  jmp @Exit
   {$endif ForceMMX}
 {$endif EnableMMX}
 {FPU code is only used if MMX is not forced}
 {$ifndef ForceMMX}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @FPUMove:
   neg ecx
   jns @FPUMoveLast12
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @FPUMoveLoop:
   {Move a 16 byte block}
   fild qword ptr [eax + ecx]
@@ -5358,7 +5717,7 @@ asm
   {Are there another 16 bytes to move?}
   add ecx, 16
   js @FPUMoveLoop
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @FPUMoveLast12:
   {Do the last 12 bytes}
   fild qword ptr [eax + ecx]
@@ -5373,7 +5732,8 @@ asm
   {$endif}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-  jmp MoveWithErmsNoAVX
+  call MoveWithErmsNoAVX
+  jmp @Exit
 @NoERMS:
   {Make the counter negative based: The last 8 bytes are moved separately}
   sub r8, 8
@@ -5381,16 +5741,21 @@ asm
   add rdx, r8
   neg r8
   jns @MoveLast8
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MoveLoop:
   {Move a 16 byte block}
+{$ifdef AlignAtLeast16Bytes}
   movdqa xmm0, [rcx + r8]
   movdqa [rdx + r8], xmm0
+{$else}
+  movdqu xmm0, [rcx + r8]
+  movdqu [rdx + r8], xmm0
+{$endif}
   {Are there another 16 bytes to move?}
   add r8, 16
   js @MoveLoop
   xorps xmm0, xmm0
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MoveLast8:
   {Do the last 8 bytes}
   mov r9, [rcx + r8]
@@ -5402,22 +5767,28 @@ asm
   add rsi, rdx
   neg rdx
   jns @MoveLast8
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MoveLoop:
   {Move a 16 byte block}
+{$ifdef AlignAtLeast16Bytes}
   movdqa xmm0, [rdi + rdx]
   movdqa [rsi + rdx], xmm0
+{$else}
+  movdqu xmm0, [rdi + rdx]
+  movdqu [rsi + rdx], xmm0
+{$endif}
   {Are there another 16 bytes to move?}
   add rdx, 16
   js @MoveLoop
   xorps xmm0, xmm0
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MoveLast8:
   {Do the last 8 bytes}
   mov rcx, [rdi + rdx]
   mov [rsi + rdx], rcx
   {$endif unix}
 {$endif 32bit}
+@Exit:
 end;
 
 
@@ -5428,7 +5799,7 @@ end;
 
 {$ifdef EnableAVX}
 
-procedure MoveX32LpAvx1NoErms(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX32LpAvx1NoErms(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -5446,7 +5817,7 @@ asm
   cmp r8, -128
   jg  @SmallAvxMove
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @AvxBigMoveAlignedAll:
   db $C4, $C1, $7D, $6F, $04, $08      // vmovdqa ymm0, ymmword ptr [rcx+r8]
@@ -5461,7 +5832,7 @@ asm
   cmp r8, -128
   jl  @AvxBigMoveAlignedAll
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @SmallAvxMove:
 
@@ -5479,7 +5850,7 @@ asm
   db $C5, $E4, $57, $DB                // vxorps      ymm3,ymm3,ymm3
   db $C5, $F8, $77                     // vzeroupper
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @MoveLast8:
   {Do the last 8 bytes}
@@ -5492,7 +5863,7 @@ asm
 @exit:
 end;
 
-procedure MoveX32LpAvx2NoErms(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX32LpAvx2NoErms(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -5508,7 +5879,7 @@ asm
   cmp r8, -128
   jg  @SmallAvxMove
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @AvxBigMoveAlignedAll:
   db $C4, $C1, $7D, $6F, $04, $08      // vmovdqa ymm0, ymmword ptr [rcx+r8]
@@ -5523,7 +5894,7 @@ asm
   cmp r8, -128
   jl  @AvxBigMoveAlignedAll
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @SmallAvxMove:
 
@@ -5540,7 +5911,7 @@ asm
   db $C5, $ED, $EF, $D2                 // vpxor       ymm2,ymm2,ymm2
   db $C5, $E5, $EF, $DB                 // vpxor       ymm3,ymm3,ymm3
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MoveLast8:
   {Do the last 8 bytes}
   mov rcx, [rcx + r8]
@@ -5559,7 +5930,7 @@ end;
 const
   cLeastErmsAdvantageLengh = 2048;
 
-procedure MoveX32LpAvx1WithErms(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX32LpAvx1WithErms(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -5575,7 +5946,7 @@ asm
   cmp r8, 0-cLeastErmsAdvantageLengh
   jg @DontDoRepMovsb
 
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 
 @DoRepMovsb:
   mov rax, rsi
@@ -5591,7 +5962,7 @@ asm
   mov rsi, rax
   jmp @exit
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @DontDoRepMovsb:
 
@@ -5600,7 +5971,7 @@ asm
   cmp r8, -128
   jg  @SmallAvxMove
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @AvxBigMoveAlignedAll:
   db $C4, $C1, $7D, $6F, $04, $08      // vmovdqa ymm0, ymmword ptr [rcx+r8]
@@ -5615,7 +5986,7 @@ asm
   cmp r8, -128
   jl  @AvxBigMoveAlignedAll
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @SmallAvxMove:
 
@@ -5633,7 +6004,7 @@ asm
   db $C5, $E4, $57, $DB                // vxorps      ymm3,ymm3,ymm3
   db $C5, $F8, $77                     // vzeroupper
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @MoveLast8:
   {Do the last 8 bytes}
@@ -5646,7 +6017,7 @@ asm
 @exit:
 end;
 
-procedure MoveX32LpAvx2WithErms(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX32LpAvx2WithErms(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
@@ -5662,7 +6033,7 @@ asm
   cmp r8, 0-cLeastErmsAdvantageLengh
   jg @DontDoRepMovsb
 
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 
 @DoRepMovsb:
   mov rax, rsi
@@ -5678,13 +6049,13 @@ asm
   mov rsi, rax
   jmp @exit
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @DontDoRepMovsb:
   cmp r8, -128
   jg  @SmallAvxMove
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @AvxBigMoveAlignedAll:
   db $C4, $C1, $7D, $6F, $04, $08      // vmovdqa ymm0, ymmword ptr [rcx+r8]
@@ -5699,7 +6070,7 @@ asm
   cmp r8, -128
   jl  @AvxBigMoveAlignedAll
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @SmallAvxMove:
 
@@ -5716,7 +6087,7 @@ asm
   db $C5, $ED, $EF, $D2                // vpxor       ymm2,ymm2,ymm2
   db $C5, $E5, $EF, $DB                // vpxor       ymm3,ymm3,ymm3
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @MoveLast8:
   {Do the last 8 bytes}
@@ -5752,7 +6123,7 @@ const
 
   cRepMovsSmallBlock = cRoundErmsBlockSizeBoundary * 3;
 
-procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
 // Under 32-bit Windows or Unix, the call passes first parametr in EAX, second in EDX, third in ECX
@@ -6075,13 +6446,13 @@ end;
  SizeOf(Pointer). Important note: Always moves at least 8 - SizeOf(Pointer)
  bytes (the minimum small block size with 8 byte alignment), irrespective of
  ACount.}
-procedure MoveX8LP(const ASource; var ADest; ACount: NativeInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure MoveX8LP(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   test FastMMCpuFeatures, FastMMCpuFeatureERMS
   jz @NoERMS
-  jmp MoveWithErmsNoAVX
-
+  call MoveWithErmsNoAVX
+  jmp @Exit
 @NoERMS:
   {Make the counter negative based: The last 4 bytes are moved separately}
   sub ecx, 4
@@ -6096,7 +6467,7 @@ asm
   jz @FPUMoveLoop
   {$endif}
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @MMXMoveLoop:
   {Move an 8 byte block}
@@ -6121,12 +6492,12 @@ asm
   {Do the last 4 bytes}
   mov eax, [eax + ecx]
   mov [edx + ecx], eax
-  ret
+  jmp @Exit
 {$endif}
 {FPU code is only used if MMX is not forced}
 {$ifndef ForceMMX}
 
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 
 @FPUMoveLoop:
   {Move an 8 byte block}
@@ -6138,9 +6509,9 @@ asm
   {Do the last 4 bytes}
   mov eax, [eax + ecx]
   mov [edx + ecx], eax
-  ret
+  jmp @Exit
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @FourBytesOrLess:
   {Four or less bytes to move}
   mov eax, [eax]
@@ -6154,7 +6525,7 @@ asm
   add rcx, r8
   add rdx, r8
   neg r8
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MoveLoop:
   {Move an 8 byte block}
   mov r9, [rcx + r8]
@@ -6167,7 +6538,7 @@ asm
   add rdi, rdx
   add rsi, rdx
   neg rdx
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MoveLoop:
   {Move an 8 byte block}
   mov rcx, [rdi + rdx]
@@ -6177,10 +6548,10 @@ asm
   js @MoveLoop
   {$Endif}
 {$endif}
+@Exit:
 end;
 
 {$endif ASMVersion}
-
 
 {----------------Windows Emulation Functions for Kylix / OS X Support-----------------}
 
@@ -6268,7 +6639,7 @@ end;
 
 {Fills a block of memory with the given dword (32-bit) or qword (64-bit).
  Always fills a multiple of SizeOf(Pointer) bytes}
-procedure DebugFillMem(var AAddress; AByteCount: NativeInt; AFillValue: NativeUInt); {$ifdef fpc64bit} assembler; nostackframe; {$endif}
+procedure DebugFillMem(var AAddress; AByteCount: NativeInt; AFillValue: NativeUInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
   {On Entry:
@@ -6278,7 +6649,7 @@ asm
   add eax, edx
   neg edx
   jns @Done
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @FillLoop:
   mov [eax + edx], ecx
   add edx, 4
@@ -6294,7 +6665,7 @@ asm
   add rcx, rdx
   neg rdx
   jns @Done
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @FillLoop:
   mov [rcx + rdx], r8
   add rdx, 8
@@ -6308,7 +6679,7 @@ asm
   add rdi, rsi
   neg rsi
   jns @Done
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @FillLoop:
   mov [rdi + rsi], rdx
   add rsi, 8
@@ -6566,8 +6937,8 @@ begin
   LCount := 0;
   repeat
     LDigit := LNum;
-    LNum := LNum div 16;
-    LDigit := LDigit - LNum * 16;
+    LNum := LNum shr 4 {div 16};
+    LDigit := LDigit - (LNum shl 4) { * 16};
     Inc(LCount);
     LIndex := MaxDigits - LCount;
     LDigitBuffer[LIndex] := HexTable[LDigit];
@@ -6584,6 +6955,7 @@ begin
   end;
 end;
 {$else}
+assembler;
 asm
   {On entry:
     eax = ANum
@@ -6713,7 +7085,10 @@ var
 {$ifdef EnableMemoryLeakReportingUsesQualifiedClassName}
   FirstUnitNameChar: PAnsiChar;
   LClassInfo: Pointer;
+  LClassInfoPByte: PByte;
+  LClassInfoByte1: Byte;
   UnitName: PShortString;
+  LClassData: PClassData;
 {$endif EnableMemoryLeakReportingUsesQualifiedClassName}
   LPClassName: PShortString;
 begin
@@ -6726,13 +7101,18 @@ begin
     LClassInfo := AClass.ClassInfo;
     if LClassInfo <> nil then // prepend the UnitName
     begin
-      UnitName := @PClassData(PByte(LClassInfo) + 2 + PByte(PByte(LClassInfo) + 1)^).UnitName;
-      FirstUnitNameChar := @UnitName^[1];
+      LClassInfoPByte := LClassInfo;
+      LClassInfoByte1 := PByte(LClassInfoPByte + 1)^;
+      Inc(LClassInfoPByte, 2);
+      Inc(LClassInfoPByte, LClassInfoByte1);
+      LClassData := PClassData(LClassInfoPByte);
+      UnitName := @(LClassData^.UnitName);
+      FirstUnitNameChar := @(UnitName^[1]);
       if FirstUnitNameChar^ <> '@' then
         Result := AppendStringToBuffer(FirstUnitNameChar, Result, Length(UnitName^), ADestinationBufferLengthChars)
       else // Pos does no memory allocations, so it is safe to use
       begin // Skip the '@', then copy until the ':' - never seen this happen in Delphi, but might be a C++ thing
-        Result := AppendStringToBuffer(@UnitName^[2], Result, Pos(ShortString(':'), UnitName^) - 2, ADestinationBufferLengthChars)
+        Result := AppendStringToBuffer(@(UnitName^[2]), Result, Pos(ShortString(':'), UnitName^) - 2, ADestinationBufferLengthChars)
         ;
       end;
       // dot between unit name and class name:
@@ -6845,7 +7225,7 @@ begin
   if (LBlockHeader and (IsMediumBlockFlag or IsLargeBlockFlag)) = 0 then
   begin
     LPSmallBlockPool := PSmallBlockPoolHeader(LBlockHeader and DropSmallFlagsMask);
-    Result := LPSmallBlockPool.BlockType.BlockSize - BlockHeaderSize;
+    Result := LPSmallBlockPool^.BlockType^.BlockSize - BlockHeaderSize;
   end
   else
   begin
@@ -6895,17 +7275,17 @@ begin
   {Get the pointer to the first block}
   AFirstPtr := Pointer(PByte(APSmallBlockPool) + SmallBlockPoolHeaderSize);
   {Get a pointer to the last block}
-  if (APSmallBlockPool.BlockType.CurrentSequentialFeedPool <> APSmallBlockPool)
-    or (UIntPtr(APSmallBlockPool.BlockType.NextSequentialFeedBlockAddress) > UIntPtr(APSmallBlockPool.BlockType.MaxSequentialFeedBlockAddress)) then
+  if (APSmallBlockPool^.BlockType^.CurrentSequentialFeedPool <> APSmallBlockPool)
+    or (UIntPtr(APSmallBlockPool^.BlockType^.NextSequentialFeedBlockAddress) > UIntPtr(APSmallBlockPool^.BlockType^.MaxSequentialFeedBlockAddress)) then
   begin
     {Not the sequential feed - point to the end of the block}
     LBlockSize := PNativeUInt(PByte(APSmallBlockPool) - BlockHeaderSize)^ and DropMediumAndLargeFlagsMask;
-    ALastPtr := Pointer(PByte(APSmallBlockPool) + LBlockSize - APSmallBlockPool.BlockType.BlockSize);
+    ALastPtr := Pointer(PByte(APSmallBlockPool) + LBlockSize - APSmallBlockPool^.BlockType^.BlockSize);
   end
   else
   begin
     {The sequential feed pool - point to before the next sequential feed block}
-    ALastPtr := Pointer(PByte(APSmallBlockPool.BlockType.NextSequentialFeedBlockAddress) - 1);
+    ALastPtr := Pointer(PByte(APSmallBlockPool^.BlockType^.NextSequentialFeedBlockAddress) - 1);
   end;
 end;
 
@@ -7023,7 +7403,7 @@ begin
   {$ifdef UseReleaseStack}
       if Assigned(APointer) then
       begin
-         LPReleaseStack := @MediumReleaseStack[GetStackSlot];
+         LPReleaseStack := @(MediumReleaseStack[GetStackSlot]);
          if (not LPReleaseStack^.IsFull) and LPReleaseStack.Push(APointer) then
          begin
            APointer := nil;
@@ -7104,11 +7484,11 @@ asm
   {Try again}
   jmp     @MediumBlockLockLoop
 {$endif NeverSleepOnThreadContention}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoneNoContention:
   xor     eax, eax
   jmp     @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoneWithContention:
   mov     eax, 1
 @Done:
@@ -7139,17 +7519,19 @@ end;
 procedure RemoveMediumFreeBlock(APMediumFreeBlock: PMediumFreeBlock);
 {$ifndef ASMVersion}
 var
+  LMask: Cardinal;
+  LShift: Byte;
   LPreviousFreeBlock,
   LNextFreeBlock: PMediumFreeBlock;
   LBinNumber,
   LBinGroupNumber: Cardinal;
 begin
   {Get the current previous and next blocks}
-  LNextFreeBlock := APMediumFreeBlock.NextFreeBlock;
-  LPreviousFreeBlock := APMediumFreeBlock.PreviousFreeBlock;
+  LNextFreeBlock := APMediumFreeBlock^.NextFreeBlock;
+  LPreviousFreeBlock := APMediumFreeBlock^.PreviousFreeBlock;
   {Remove this block from the linked list}
-  LPreviousFreeBlock.NextFreeBlock := LNextFreeBlock;
-  LNextFreeBlock.PreviousFreeBlock := LPreviousFreeBlock;
+  LPreviousFreeBlock^.NextFreeBlock := LNextFreeBlock;
+  LNextFreeBlock^.PreviousFreeBlock := LPreviousFreeBlock;
   {Is this bin now empty? If the previous and next free block pointers are
    equal, they must point to the bin.}
   if LPreviousFreeBlock = LNextFreeBlock then
@@ -7158,14 +7540,16 @@ begin
     LBinNumber := (UIntPtr(LNextFreeBlock) - UIntPtr(@MediumBlockBins)) shr MediumFreeBlockSizePowerOf2;
     LBinGroupNumber := LBinNumber shr MediumBlockBinsPerGroupPowerOf2;
     {Flag this bin as empty}
-    MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber]
-      and (not (UnsignedBit shl (LBinNumber and (MediumBlockBinsPerGroup-1))));
+    LShift := LBinNumber and (MediumBlockBinsPerGroup-1);
+    LMask := not (Cardinal(UnsignedBit) shl LShift);
+    MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber] and LMask;
     {Is the group now entirely empty?}
     if MediumBlockBinBitmaps[LBinGroupNumber] = 0 then
     begin
+      LMask := not (Cardinal(UnsignedBit) shl LBinGroupNumber);
+
       {Flag this group as empty}
-      MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap
-        and (not (UnsignedBit shl LBinGroupNumber));
+      MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap and LMask;
     end;
   end;
 end;
@@ -7186,10 +7570,10 @@ asm
   {Is this bin now empty? If the previous and next free block pointers are
    equal, they must point to the bin.}
   je @BinIsNowEmpty
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @Done:
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Exit
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinIsNowEmpty:
   {Get the bin number for this block size in ecx}
   sub ecx, offset MediumBlockBins
@@ -7207,6 +7591,7 @@ asm
   mov ecx, edx
   rol eax, cl
   and MediumBlockBinGroupBitmap, eax
+@Exit:
 end;
 {$else}
 assembler;
@@ -7246,7 +7631,7 @@ asm
   mov ecx, edx
   rol eax, cl
   and MediumBlockBinGroupBitmap, eax
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @Done:
 end;
 {$endif}
@@ -7256,6 +7641,7 @@ end;
 procedure InsertMediumBlockIntoBin(APMediumFreeBlock: PMediumFreeBlock; AMediumBlockSize: Cardinal);
 {$ifndef ASMVersion}
 var
+  LMask: Cardinal;
   LShift: Byte;
   LBinNumber,
   LBinGroupNumber: Cardinal;
@@ -7268,29 +7654,30 @@ begin
   if LBinNumber >= MediumBlockBinCount then
     LBinNumber := MediumBlockBinCount - 1;
   {Get the bin}
-  LPBin := @MediumBlockBins[LBinNumber];
+  LPBin := @(MediumBlockBins[LBinNumber]);
   {Bins are LIFO, se we insert this block as the first free block in the bin}
-  LPFirstFreeBlock := LPBin.NextFreeBlock;
-  APMediumFreeBlock.PreviousFreeBlock := LPBin;
-  APMediumFreeBlock.NextFreeBlock := LPFirstFreeBlock;
-  LPFirstFreeBlock.PreviousFreeBlock := APMediumFreeBlock;
-  LPBin.NextFreeBlock := APMediumFreeBlock;
+  LPFirstFreeBlock := LPBin^.NextFreeBlock;
+  APMediumFreeBlock^.PreviousFreeBlock := LPBin;
+  APMediumFreeBlock^.NextFreeBlock := LPFirstFreeBlock;
+  LPFirstFreeBlock^.PreviousFreeBlock := APMediumFreeBlock;
+  LPBin^.NextFreeBlock := APMediumFreeBlock;
   {Was this bin empty?}
   if LPFirstFreeBlock = LPBin then
   begin
     {Get the group number}
     LBinGroupNumber := LBinNumber shr MediumBlockBinsPerGroupPowerOf2;
     LShift := LBinNumber and (MediumBlockBinsPerGroup-1); // We need a separate variable LShift to avoid range check error
+    LMask := Cardinal(UnsignedBit) shl LShift;
     {Flag this bin as used}
-    MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber]
-      or (UnsignedBit shl LShift);
+    MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber] or LMask;
+    LMask := Cardinal(UnsignedBit) shl LBinGroupNumber;
     {Flag the group as used}
-    MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap
-      or (UnsignedBit shl LBinGroupNumber);
+    MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap or LMask;
   end;
 end;
 {$else}
 {$ifdef 32Bit}
+assembler;
 asm
   {On entry: eax = APMediumFreeBlock, edx = AMediumBlockSize}
   {Get the bin number for this block size. Get the bin that holds blocks of at
@@ -7314,8 +7701,8 @@ asm
   mov TMediumFreeBlock[ecx].NextFreeBlock, eax
   {Was this bin empty?}
   je @BinWasEmpty
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Exit
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinWasEmpty:
   {Get the bin number in ecx}
   sub ecx, offset MediumBlockBins
@@ -7332,6 +7719,7 @@ asm
   mov ecx, edx
   shl eax, cl
   or MediumBlockBinGroupBitmap, eax
+@Exit:
 end;
 {$else}
 assembler;
@@ -7380,7 +7768,7 @@ asm
   mov ecx, edx
   shl eax, cl
   or MediumBlockBinGroupBitmap, eax
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @Done:
 end;
 {$endif}
@@ -7446,12 +7834,13 @@ begin
 end;
 {$else}
 {$ifdef 32Bit}
+assembler;
 asm
   cmp MediumSequentialFeedBytesLeft, 0
   jne @MustBinMedium
   {Nothing to bin}
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Done
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MustBinMedium:
   {Get a pointer to the last sequentially allocated medium block}
   mov eax, LastSequentiallyFedMediumBlock
@@ -7464,7 +7853,7 @@ asm
   mov edx, MediumSequentialFeedBytesLeft
   {Point eax to the start of the remainder}
   sub eax, edx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinTheRemainder:
   {Status: eax = start of remainder, edx = size of remainder}
   {Store the size of the block as well as the flags}
@@ -7475,8 +7864,8 @@ asm
   {Bin this medium block}
   cmp edx, MinimumMediumBlockSize
   jnb InsertMediumBlockIntoBin
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Done
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LastBlockFedIsFree:
   {Drop the flags}
   mov edx, DropMediumAndLargeFlagsMask
@@ -7490,7 +7879,7 @@ asm
   mov eax, LastSequentiallyFedMediumBlock
   mov edx, DropMediumAndLargeFlagsMask
   and edx, [eax - 4]
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontRemoveLastFed:
   {Get the number of bytes left in ecx}
   mov ecx, MediumSequentialFeedBytesLeft
@@ -7499,7 +7888,7 @@ asm
   {edx = total size of the remainder}
   add edx, ecx
   jmp @BinTheRemainder
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @Done:
 end;
 {$else}
@@ -7531,7 +7920,7 @@ asm
   mov edx, MediumSequentialFeedBytesLeft
   {Point eax to the start of the remainder}
   sub rax, rdx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinTheRemainder:
   {Status: rax = start of remainder, edx = size of remainder}
   {Store the size of the block as well as the flags}
@@ -7545,7 +7934,7 @@ asm
   mov rcx, rax
   call InsertMediumBlockIntoBin
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @LastBlockFedIsFree:
   {Drop the flags}
   mov rdx, DropMediumAndLargeFlagsMask
@@ -7560,7 +7949,7 @@ asm
   mov rax, LastSequentiallyFedMediumBlock
   mov rdx, DropMediumAndLargeFlagsMask
   and rdx, [rax - BlockHeaderSize]
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontRemoveLastFed:
   {Get the number of bytes left in ecx}
   mov ecx, MediumSequentialFeedBytesLeft
@@ -7569,7 +7958,7 @@ asm
   {edx = total size of the remainder}
   add edx, ecx
   jmp @BinTheRemainder
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @Done:
 end;
 {$endif}
@@ -7592,10 +7981,10 @@ begin
   begin
     {Insert this block pool into the list of block pools}
     LOldFirstMediumBlockPool := MediumBlockPoolsCircularList.NextMediumBlockPoolHeader;
-    PMediumBlockPoolHeader(LNewPool).PreviousMediumBlockPoolHeader := @MediumBlockPoolsCircularList;
+    PMediumBlockPoolHeader(LNewPool)^.PreviousMediumBlockPoolHeader := @MediumBlockPoolsCircularList;
     MediumBlockPoolsCircularList.NextMediumBlockPoolHeader := LNewPool;
-    PMediumBlockPoolHeader(LNewPool).NextMediumBlockPoolHeader := LOldFirstMediumBlockPool;
-    LOldFirstMediumBlockPool.PreviousMediumBlockPoolHeader := LNewPool;
+    PMediumBlockPoolHeader(LNewPool)^.NextMediumBlockPoolHeader := LOldFirstMediumBlockPool;
+    LOldFirstMediumBlockPool^.PreviousMediumBlockPoolHeader := LNewPool;
     {Store the sequential feed pool trailer}
     PNativeUInt(PByte(LNewPool) + MediumBlockPoolSize - BlockHeaderSize)^ := IsMediumBlockFlag;
     {Get the number of bytes still available}
@@ -7740,8 +8129,8 @@ begin
   if Result <> nil then
   begin
     {Set the large block size and flags}
-    PLargeBlockHeader(Result).UserAllocatedSize := ASize;
-    PLargeBlockHeader(Result).BlockSizeAndFlags := LLargeUsedBlockSize or IsLargeBlockFlag;
+    PLargeBlockHeader(Result)^.UserAllocatedSize := ASize;
+    PLargeBlockHeader(Result)^.BlockSizeAndFlags := LLargeUsedBlockSize or IsLargeBlockFlag;
   {$ifndef AssumeMultiThreaded}
     if IsMultiThread then
   {$endif}
@@ -7754,10 +8143,10 @@ begin
       LockLargeBlocks;
     end;
     LOldFirstLargeBlock := LargeBlocksCircularList.NextLargeBlockHeader;
-    PLargeBlockHeader(Result).PreviousLargeBlockHeader := @LargeBlocksCircularList;
+    PLargeBlockHeader(Result)^.PreviousLargeBlockHeader := @LargeBlocksCircularList;
     LargeBlocksCircularList.NextLargeBlockHeader := Result;
-    PLargeBlockHeader(Result).NextLargeBlockHeader := LOldFirstLargeBlock;
-    LOldFirstLargeBlock.PreviousLargeBlockHeader := Result;
+    PLargeBlockHeader(Result)^.NextLargeBlockHeader := LOldFirstLargeBlock;
+    LOldFirstLargeBlock^.PreviousLargeBlockHeader := Result;
   {$ifndef AssumeMultiThreaded}
     if LLockLargeBlocksLocked then
   {$endif}
@@ -7853,11 +8242,11 @@ begin
     {Point to the start of the large block}
     LPointer := Pointer(PByte(LPointer) - LargeBlockHeaderSize);
     {Get the previous and next large blocks}
-    LPreviousLargeBlockHeader := PLargeBlockHeader(LPointer).PreviousLargeBlockHeader;
-    LNextLargeBlockHeader := PLargeBlockHeader(LPointer).NextLargeBlockHeader;
+    LPreviousLargeBlockHeader := PLargeBlockHeader(LPointer)^.PreviousLargeBlockHeader;
+    LNextLargeBlockHeader := PLargeBlockHeader(LPointer)^.NextLargeBlockHeader;
   {$ifndef POSIX}
     {Is the large block segmented?}
-    if (PLargeBlockHeader(LPointer).BlockSizeAndFlags and LargeBlockIsSegmented) = 0 then
+    if (PLargeBlockHeader(LPointer)^.BlockSizeAndFlags and LargeBlockIsSegmented) = 0 then
     begin
   {$endif}
       {Single segment large block: Try to free it}
@@ -7871,7 +8260,7 @@ begin
     begin
       {The large block is segmented - free all segments}
       LCurrentSegment := LPointer;
-      LRemainingSize := PLargeBlockHeader(LPointer).BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
+      LRemainingSize := PLargeBlockHeader(LPointer)^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
       Result := 0;
       while True do
       begin
@@ -7897,8 +8286,8 @@ begin
     if Result = 0 then
     begin
       {Remove the large block from the linked list}
-      LNextLargeBlockHeader.PreviousLargeBlockHeader := LPreviousLargeBlockHeader;
-      LPreviousLargeBlockHeader.NextLargeBlockHeader := LNextLargeBlockHeader;
+      LNextLargeBlockHeader^.PreviousLargeBlockHeader := LPreviousLargeBlockHeader;
+      LPreviousLargeBlockHeader^.NextLargeBlockHeader := LNextLargeBlockHeader;
     end;
 {$ifdef UseReleaseStack}
     if (Result <> 0) or ACleanupOperation then
@@ -7980,9 +8369,9 @@ begin
           and (VirtualAlloc(LNextSegmentPointer, LNewSegmentSize, MEM_COMMIT, PAGE_READWRITE) <> nil) then
         begin
           {Update the requested size}
-          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
-          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).BlockSizeAndFlags :=
-            (PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).BlockSizeAndFlags + LNewSegmentSize)
+          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
+          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.BlockSizeAndFlags :=
+            (PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.BlockSizeAndFlags + LNewSegmentSize)
             or LargeBlockIsSegmented;
           {Success}
           Result := APointer;
@@ -7999,9 +8388,9 @@ begin
        not be if the block that is being reallocated from was previously
        downsized)}
       if LNewAllocSize > (MaximumMediumBlockSize - BlockHeaderSize) then
-        PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
+        PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
       {The user allocated size is stored for large blocks}
-      LOldUserSize := PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).UserAllocatedSize;
+      LOldUserSize := PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.UserAllocatedSize;
       {The number of bytes to move is the old user size.}
 {$ifdef UseCustomVariableSizeMoveRoutines}
    {$ifdef Align32Bytes}
@@ -8025,7 +8414,7 @@ begin
       {No need to reallocate}
       Result := APointer;
       {Update the requested size}
-      PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
+      PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
     end
     else
     begin
@@ -8036,7 +8425,7 @@ begin
       begin
         {Still a large block? -> Set the user size}
         if ANewSize > (MaximumMediumBlockSize - BlockHeaderSize) then
-          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
+          PLargeBlockHeader(PByte(APointer) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
         {Move the data across}
 {$ifdef UseCustomVariableSizeMoveRoutines}
 {$ifdef Align32Bytes}
@@ -8188,16 +8577,17 @@ begin
   Result := LOffset;
 end;
 {$else ASMVersion}
-{$ifdef fpc64bit} assembler; nostackframe; {$endif}
+assembler;
+{$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef 64Bit}
   {$ifndef unix}
   {$ifdef AllowAsmNoframe}
   .noframe
   {$endif}
-  mov rax, rcx
+  mov eax, ecx
   {$else}
-  mov rax, rdi
+  mov eax, edi
   {$endif}
 {$endif}
   bsf eax, eax
@@ -8233,8 +8623,12 @@ function FastGetMem(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUI
 assembler;
 asm
   test FastMMCpuFeatures, FastMMCpuFeaturePauseAndSwitch
-  jz FastGetMemPascal
-  jmp FastGetMemAssembler
+  jz @FastGetMemPascal
+  call FastGetMemAssembler
+  jmp @Exit
+@FastGetMemPascal:
+  call FastGetMemPascal
+@Exit:
 end;
 {$endif}
 
@@ -8285,7 +8679,11 @@ var
 {$endif}
   LMediumBlocksLocked: Boolean;
   LSmallBlockWithoutLock: Boolean;
+  LBlockTypeIndex, LBlockTypeOffset: NativeUInt;
+  LShift: Byte;
+  LMask: Cardinal;
 begin
+
   LMediumBlocksLocked := False;
   LSmallBlockWithoutLock := False;
 
@@ -8305,23 +8703,26 @@ begin
   begin
     {-------------------------Allocate a small block---------------------------}
     {Get the block type from the size}
-    LSmallBlockSizeInGranularUnits := (NativeUInt(ASize) + (BlockHeaderSize - 1)) div SmallBlockGranularity;
-    LPSmallBlockType := PSmallBlockType(
+    LSmallBlockSizeInGranularUnits := (NativeUInt(ASize) + (BlockHeaderSize - 1)) shr SmallBlockGranularityPowerOf2;
+    LBlockTypeIndex :=
    {$ifdef AllocSize2SmallBlockTypesPrecomputedOffsets}
-      AllocSz2SmlBlkTypOfsDivSclFctr[LSmallBlockSizeInGranularUnits]
-          shl MaximumCpuScaleFactorPowerOf2
+    AllocSz2SmlBlkTypOfsDivSclFctr[LSmallBlockSizeInGranularUnits]
    {$else}
-      (
-      AllocSize2SmallBlockTypesIdx[LSmallBlockSizeInGranularUnits]
-        {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
-          shl SmallBlockTypeRecSizePowerOf2
-        {$else}
-          * SmallBlockTypeRecSize
-        {$endif}
-      )
+    AllocSize2SmallBlockTypesIdx[LSmallBlockSizeInGranularUnits]
    {$endif}
-        + UIntPtr(@SmallBlockTypes)
-    );
+    ;
+    LBlockTypeOffset := LBlockTypeIndex
+    {$ifdef AllocSize2SmallBlockTypesPrecomputedOffsets}
+      shl MaximumCpuScaleFactorPowerOf2
+    {$else}
+      {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
+        shl SmallBlockTypeRecSizePowerOf2
+      {$else}
+        * SmallBlockTypeRecSize
+      {$endif}
+    {$endif}
+    ;
+    LPSmallBlockType := PSmallBlockType(LBlockTypeOffset+UIntPtr(@SmallBlockTypes[0]));
 {$ifdef UseReleaseStack}
     LPReleaseStack := @LPSmallBlockType.ReleaseStack[GetStackSlot];
     if (not LPReleaseStack^.IsEmpty) and LPReleaseStack^.Pop(Result) then
@@ -8338,24 +8739,24 @@ begin
       while True do
       begin
         {Try to lock the small block type (0)}
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
 
         {Try the next block type (+1)}
         Inc(PByte(LPSmallBlockType), SmallBlockTypeRecSize);
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
 
         {Try up to two sizes past the requested size (+2)}
         Inc(PByte(LPSmallBlockType), SmallBlockTypeRecSize);
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
 
-        {All three sizes locked - give up and sleep {revert pointer (-2))}
+        {All three sizes locked - give up and sleep (revert pointer (-2))}
         Dec(PByte(LPSmallBlockType), 2 * SmallBlockTypeRecSize);
 
         {Try to once again, last time to lock the small block type (0)}
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
 
 {$ifdef SmallBlocksLockedCriticalSection}
@@ -8373,7 +8774,7 @@ begin
         {Both this block type and the next is in use: sleep}
         Sleep(InitialSleepTime);
         {Try to acquire the lock again}
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
         {Sleep longer}
         Sleep(AdditionalSleepTime);
@@ -8387,7 +8788,7 @@ begin
       begin
         if LFailedToAcquireLock then
         begin
-          AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+          AcquireSpinLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
         end;
       end else
       {$endif}
@@ -8403,7 +8804,7 @@ begin
         if LFailedToAcquireLock then
         begin
           {Try the lock again}
-          if not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+          if not AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           begin
             LSmallBlockWithoutLock := True;
           end;
@@ -8413,12 +8814,12 @@ begin
 
     end;
     {Get the first pool with free blocks}
-    LPSmallBlockPool := LPSmallBlockType.NextPartiallyFreePool;
+    LPSmallBlockPool := LPSmallBlockType^.NextPartiallyFreePool;
     {Is the pool valid?}
     if UIntPtr(LPSmallBlockPool) <> UIntPtr(LPSmallBlockType) then
     begin
       {Get the first free offset}
-      Result := LPSmallBlockPool.FirstFreeBlock;
+      Result := LPSmallBlockPool^.FirstFreeBlock;
       {Get the new first free block}
       LNewFirstFreeBlock := PPointer(PByte(Result) - BlockHeaderSize)^;
 {$ifdef CheckHeapForCorruption}
@@ -8432,31 +8833,31 @@ begin
 {$endif CheckHeapForCorruption}
       LNewFirstFreeBlock := Pointer(UIntPtr(LNewFirstFreeBlock) and DropSmallFlagsMask);
       {Increment the number of used blocks}
-      Inc(LPSmallBlockPool.BlocksInUse);
+      Inc(LPSmallBlockPool^.BlocksInUse);
       {Set the new first free block}
-      LPSmallBlockPool.FirstFreeBlock := LNewFirstFreeBlock;
+      LPSmallBlockPool^.FirstFreeBlock := LNewFirstFreeBlock;
       {Is the pool now full?}
       if LNewFirstFreeBlock = nil then
       begin
         {Pool is full - remove it from the partially free list}
-        LPNewFirstPool := LPSmallBlockPool.NextPartiallyFreePool;
-        LPSmallBlockType.NextPartiallyFreePool := LPNewFirstPool;
-        LPNewFirstPool.PreviousPartiallyFreePool := PSmallBlockPoolHeader(LPSmallBlockType);
+        LPNewFirstPool := LPSmallBlockPool^.NextPartiallyFreePool;
+        LPSmallBlockType^.NextPartiallyFreePool := LPNewFirstPool;
+        LPNewFirstPool^.PreviousPartiallyFreePool := PSmallBlockPoolHeader(LPSmallBlockType);
       end;
     end
     else
     begin
       {Try to feed a small block sequentially}
-      Result := LPSmallBlockType.NextSequentialFeedBlockAddress;
+      Result := LPSmallBlockType^.NextSequentialFeedBlockAddress;
       {Can another block fit?}
-      if UIntPtr(Result) <= UIntPtr(LPSmallBlockType.MaxSequentialFeedBlockAddress) then
+      if UIntPtr(Result) <= UIntPtr(LPSmallBlockType^.MaxSequentialFeedBlockAddress) then
       begin
         {Get the sequential feed block pool}
-        LPSmallBlockPool := LPSmallBlockType.CurrentSequentialFeedPool;
+        LPSmallBlockPool := LPSmallBlockType^.CurrentSequentialFeedPool;
         {Increment the number of used blocks in the sequential feed pool}
-        Inc(LPSmallBlockPool.BlocksInUse);
+        Inc(LPSmallBlockPool^.BlocksInUse);
         {Store the next sequential feed block address}
-        LPSmallBlockType.NextSequentialFeedBlockAddress := Pointer(PByte(Result) + LPSmallBlockType.BlockSize);
+        LPSmallBlockType^.NextSequentialFeedBlockAddress := Pointer(PByte(Result) + LPSmallBlockType^.BlockSize);
       end
       else
       begin
@@ -8477,7 +8878,7 @@ begin
 {$endif}
 {$ifndef FullDebugMode}
         {Are there any available blocks of a suitable size?}
-        LBinGroupsMasked := MediumBlockBinGroupBitmap and ($ffffff00 or LPSmallBlockType.AllowedGroupsForBlockPoolBitmap);
+        LBinGroupsMasked := MediumBlockBinGroupBitmap and ($ffffff00 or LPSmallBlockType^.AllowedGroupsForBlockPoolBitmap);
         if LBinGroupsMasked <> 0 then
         begin
           {Get the bin group with free blocks}
@@ -8485,25 +8886,26 @@ begin
           {Get the bin in the group with free blocks}
           LBinNumber := FindFirstSetBit(MediumBlockBinBitmaps[LBinGroupNumber])
             + (LBinGroupNumber shl MediumBlockBinsPerGroupPowerOf2);
-          LPMediumBin := @MediumBlockBins[LBinNumber];
+          LPMediumBin := @(MediumBlockBins[LBinNumber]);
           {Get the first block in the bin}
-          LMediumBlock := LPMediumBin.NextFreeBlock;
+          LMediumBlock := LPMediumBin^.NextFreeBlock;
           {Remove the first block from the linked list (LIFO)}
-          LNextFreeBlock := LMediumBlock.NextFreeBlock;
-          LPMediumBin.NextFreeBlock := LNextFreeBlock;
-          LNextFreeBlock.PreviousFreeBlock := LPMediumBin;
+          LNextFreeBlock := LMediumBlock^.NextFreeBlock;
+          LPMediumBin^.NextFreeBlock := LNextFreeBlock;
+          LNextFreeBlock^.PreviousFreeBlock := LPMediumBin;
           {Is this bin now empty?}
           if LNextFreeBlock = LPMediumBin then
           begin
+            LShift := LBinNumber and (MediumBlockBinsPerGroup-1);
+            LMask := not (Cardinal(UnsignedBit) shl LShift);
             {Flag this bin as empty}
-            MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber]
-              and (not (UnsignedBit shl (LBinNumber and (MediumBlockBinsPerGroup-1))));
+            MediumBlockBinBitmaps[LBinGroupNumber] := MediumBlockBinBitmaps[LBinGroupNumber] and LMask;
             {Is the group now entirely empty?}
             if MediumBlockBinBitmaps[LBinGroupNumber] = 0 then
             begin
+              LMask := not (Cardinal(UnsignedBit) shl LBinGroupNumber);
               {Flag this group as empty}
-              MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap
-                and (not (UnsignedBit shl LBinGroupNumber));
+              MediumBlockBinGroupBitmap := MediumBlockBinGroupBitmap and LMask;
             end;
           end;
           {Get the size of the available medium block}
@@ -8526,9 +8928,9 @@ begin
           if LBlockSize >= MaximumSmallBlockPoolSize then
           begin
             {Get the size of the second split}
-            LSecondSplitSize := LBlockSize - LPSmallBlockType.OptimalBlockPoolSize;
+            LSecondSplitSize := LBlockSize - LPSmallBlockType^.OptimalBlockPoolSize;
             {Adjust the block size}
-            LBlockSize := LPSmallBlockType.OptimalBlockPoolSize;
+            LBlockSize := LPSmallBlockType^.OptimalBlockPoolSize;
             {Split the block in two}
             LSecondSplit := PMediumFreeBlock(PByte(LMediumBlock) + LBlockSize);
             PNativeUInt(PByte(LSecondSplit) - BlockHeaderSize)^ := LSecondSplitSize or (IsMediumBlockFlag or IsFreeBlockFlag);
@@ -8549,12 +8951,12 @@ begin
         begin
           {Check the sequential feed medium block pool for space}
           LSequentialFeedFreeSize := MediumSequentialFeedBytesLeft;
-          if LSequentialFeedFreeSize >= LPSmallBlockType.MinimumBlockPoolSize then
+          if LSequentialFeedFreeSize >= LPSmallBlockType^.MinimumBlockPoolSize then
           begin
             {Enough sequential feed space: Will the remainder be usable?}
-            if LSequentialFeedFreeSize >= (LPSmallBlockType.OptimalBlockPoolSize + MinimumMediumBlockSize) then
+            if LSequentialFeedFreeSize >= (LPSmallBlockType^.OptimalBlockPoolSize + MinimumMediumBlockSize) then
             begin
-              LBlockSize := LPSmallBlockType.OptimalBlockPoolSize;
+              LBlockSize := LPSmallBlockType^.OptimalBlockPoolSize;
             end
             else
               LBlockSize := LSequentialFeedFreeSize;
@@ -8568,7 +8970,7 @@ begin
           begin
             {Need to allocate a new sequential feed medium block pool: use the
              optimal size for this small block pool}
-            LBlockSize := LPSmallBlockType.OptimalBlockPoolSize;
+            LBlockSize := LPSmallBlockType^.OptimalBlockPoolSize;
             {Allocate the medium block pool}
             LMediumBlock := AllocNewSequentialFeedMediumPool(LBlockSize);
             if LMediumBlock = nil then
@@ -8587,7 +8989,7 @@ begin
                 {Unlock the block type}
                 if not LSmallBlockWithoutLock then
                 begin
-                  ReleaseLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+                  ReleaseLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
                 end else
                 begin
                   LSmallBlockWithoutLock := False;
@@ -8623,19 +9025,19 @@ begin
         end;
         {Set up the block pool}
         LPSmallBlockPool := PSmallBlockPoolHeader(LMediumBlock);
-        LPSmallBlockPool.BlockType := LPSmallBlockType;
-        LPSmallBlockPool.FirstFreeBlock := nil;
-        LPSmallBlockPool.BlocksInUse := 1;
+        LPSmallBlockPool^.BlockType := LPSmallBlockType;
+        LPSmallBlockPool^.FirstFreeBlock := nil;
+        LPSmallBlockPool^.BlocksInUse := 1;
         {Set it up for sequential block serving}
-        LPSmallBlockType.CurrentSequentialFeedPool := LPSmallBlockPool;
+        LPSmallBlockType^.CurrentSequentialFeedPool := LPSmallBlockPool;
         Result := Pointer(PByte(LPSmallBlockPool) + SmallBlockPoolHeaderSize);
-        LPSmallBlockType.NextSequentialFeedBlockAddress := Pointer(PByte(Result) + LPSmallBlockType.BlockSize);
-        LPSmallBlockType.MaxSequentialFeedBlockAddress := Pointer(PByte(LPSmallBlockPool) + LBlockSize - LPSmallBlockType.BlockSize);
+        LPSmallBlockType^.NextSequentialFeedBlockAddress := Pointer(PByte(Result) + LPSmallBlockType^.BlockSize);
+        LPSmallBlockType^.MaxSequentialFeedBlockAddress := Pointer(PByte(LPSmallBlockPool) + LBlockSize - LPSmallBlockType^.BlockSize);
       end;
 {$ifdef FullDebugMode}
       {Clear the user area of the block}
       DebugFillMem(Pointer(PByte(Result) + (SizeOf(TFullDebugBlockHeader) + SizeOf(NativeUInt)))^,
-        LPSmallBlockType.BlockSize - FullDebugBlockOverhead - SizeOf(NativeUInt),
+        LPSmallBlockType^.BlockSize - FullDebugBlockOverhead - SizeOf(NativeUInt),
         {$ifndef CatchUseOfFreedInterfaces}DebugFillPattern{$else}NativeUInt(@VMTBadInterface){$endif});
       {Block was fed sequentially - we need to set a valid debug header. Use
        the block address.}
@@ -8652,7 +9054,7 @@ begin
       {Unlock the block type}
       if not LSmallBlockWithoutLock then
       begin
-        ReleaseLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+        ReleaseLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
       end else
       begin
         LSmallBlockWithoutLock := False;
@@ -8698,8 +9100,9 @@ begin
 
       {Calculate the bin group}
       LBinGroupNumber := LBinNumber shr MediumBlockBinsPerGroupPowerOf2;
+      LShift := LBinNumber and (MediumBlockBinsPerGroup-1);
       {Is there a suitable block inside this group?}
-      LBinGroupMasked := MediumBlockBinBitmaps[LBinGroupNumber] and NegNativeUIntMaskBit((UnsignedBit shl (LBinNumber and (MediumBlockBinsPerGroup-1))));
+      LBinGroupMasked := MediumBlockBinBitmaps[LBinGroupNumber] and NegCardinalMaskBit(Cardinal(UnsignedBit) shl LShift);
       if LBinGroupMasked <> 0 then
       begin
         {Get the actual bin number}
@@ -8786,9 +9189,9 @@ begin
       {If we get here we have a valid LBinGroupNumber and LBinNumber:
        Use the first block in the bin, splitting it if necessary}
       {Get a pointer to the bin}
-      LPMediumBin := @MediumBlockBins[LBinNumber];
+      LPMediumBin := @(MediumBlockBins[LBinNumber]);
       {Get the result}
-      Result := LPMediumBin.NextFreeBlock;
+      Result := LPMediumBin^.NextFreeBlock;
 {$ifdef CheckHeapForCorruption}
       {Check that this block is actually free and the next and previous blocks
        are both in use (except in full debug mode).}
@@ -8895,7 +9298,7 @@ end;
 {$ifdef FastGetMemNeedAssemblerCode}
 
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
-  function FastGetMemAssembler(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif fpc}{$endif XE2AndUp}{$ifdef FullDebugMode}{$ifdef LogLockContention}; var ACollector: PStaticCollector{$endif}{$endif}): Pointer;
+function FastGetMemAssembler(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif fpc}{$endif XE2AndUp}{$ifdef FullDebugMode}{$ifdef LogLockContention}; var ACollector: PStaticCollector{$endif}{$endif}): Pointer;
 {$endif}
 
 {$ifdef 32Bit}
@@ -8943,7 +9346,7 @@ like IsMultithreaded or MediumBlocksLocked}
 {$else}
   jmp @LockSmallBlockType
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotLockOnSmallBlockType:
   {$ifdef SmallBlocksLockedCriticalSection}{$ifdef DebugAcquireLockByte}
   cmp al, cLockByteAvailable
@@ -8954,7 +9357,7 @@ like IsMultithreaded or MediumBlocksLocked}
   or ebp, (UnsignedBit shl StateBitSmallLocked)
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AfterLock:
   {Find the next free block: Get the first pool with free blocks in edx}
   mov edx, TSmallBlockType[ebx].NextPartiallyFreePool
@@ -8975,7 +9378,7 @@ like IsMultithreaded or MediumBlocksLocked}
   mov [eax - BlockHeaderSize], edx
   {Is the chunk now full?}
   jz @RemoveSmallPool
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
 {$ifndef AssumeMultiThreaded}
@@ -8992,7 +9395,7 @@ like IsMultithreaded or MediumBlocksLocked}
 {$endif}
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Exit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @TrySmallSequentialFeed:
   {Try to feed a small block sequentially: Get the sequential feed block pool}
   mov edx, TSmallBlockType[ebx].CurrentSequentialFeedPool
@@ -9008,7 +9411,7 @@ like IsMultithreaded or MediumBlocksLocked}
   mov TSmallBlockType[ebx].NextSequentialFeedBlockAddress, ecx
   mov [eax - 4], edx
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @RemoveSmallPool:
   {Pool is full - remove it from the partially free list}
   mov ecx, TSmallBlockPoolHeader[edx].NextPartiallyFreePool
@@ -9018,7 +9421,7 @@ like IsMultithreaded or MediumBlocksLocked}
 
 {===== START OF SMALL BLOCK LOCKING CODE; 32-BIT FASTGETMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockType:
 
 {$ifdef SmallBlocksLockedCriticalSection}
@@ -9039,7 +9442,7 @@ like IsMultithreaded or MediumBlocksLocked}
    lock xchg TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @FirstBlockLocked:
   {Try the next size}
    add  ebx, edx
@@ -9058,7 +9461,7 @@ like IsMultithreaded or MediumBlocksLocked}
    lock xchg TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @SecondBlockLocked:
   {Try the next size (up to two sizes larger)}
    add  ebx, edx
@@ -9076,16 +9479,16 @@ like IsMultithreaded or MediumBlocksLocked}
    lock xchg TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @ThirdBlockLocked:
   {Block type and two sizes larger are all locked - give up and sleep}
    sub  ebx, edx
    sub  ebx, edx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockTypeLoop:
    mov  edx, cSpinWaitLoopCount
    mov  eax, cLockByteLocked
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -9108,7 +9511,7 @@ like IsMultithreaded or MediumBlocksLocked}
    je   @DidntLock
    {Congratulations! We've got the lock!}
    jmp	@GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @SwitchToThread:
    push  ebx
    push  ecx
@@ -9173,7 +9576,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 
 {===== END OF SMALL BLOCK LOCKING CODE; 32-BIT FASTGETMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AllocateSmallBlockPool:
   {save additional registers}
   push esi
@@ -9195,7 +9598,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLockedForPool:
   {Are there any available blocks of a suitable size?}
   movsx esi, TSmallBlockType[ebx].AllowedGroupsForBlockPoolBitmap
@@ -9227,7 +9630,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jnz @MediumBinNotEmpty
   {Flag the group as empty}
   btr MediumBlockBinGroupBitmap, eax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBinNotEmpty:
   {esi = free block, ebx = block type}
   {Get the size of the available medium block in edi}
@@ -9249,7 +9652,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Put the remainder in a bin (it will be big enough)}
   call InsertMediumBlockIntoBin
   jmp @GotMediumBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NoSuitableMediumBlocks:
   {Check the sequential feed medium block pool for space}
   movzx ecx, TSmallBlockType[ebx].MinimumBlockPoolSize
@@ -9264,7 +9667,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   cmp edi, edx
   jb @NotMuchSpace
   mov edi, ecx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotMuchSpace:
   sub esi, edi
   {Update the sequential feed parameters}
@@ -9272,7 +9675,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov LastSequentiallyFedMediumBlock, esi
   {Get the block pointer}
   jmp @GotMediumBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AllocateNewSequentialFeed:
   {Need to allocate a new sequential feed medium block pool: use the
    optimal size for this small block pool}
@@ -9295,18 +9698,18 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontUnlMedBlksAftrAllocNewSeqFd:
   mov eax, esi
   pop edi
   pop esi
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UseWholeBlock:
   {esi = free block, ebx = block type, edi = block size}
   {Mark this block as used in the block following it}
   and byte ptr [esi + edi - 4], not PreviousMediumBlockIsFreeFlag
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlock:
   {esi = free block, ebx = block type, edi = block size}
   {Set the size and flags for this block}
@@ -9327,7 +9730,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontUnlMedBlksAftrGotMedBlk:
   {Set up the block pool}
   xor eax, eax
@@ -9350,7 +9753,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   pop edi
   pop esi
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 {-------------------Medium block allocation-------------------}
 @NotASmallBlock:
   cmp eax, (MaximumMediumBlockSize - BlockHeaderSize)
@@ -9378,7 +9781,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   or ebp, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLocked:
   {Get the bin number in ecx and the group number in edx}
   lea edx, [ebx - MinimumMediumBlockSize]
@@ -9395,7 +9798,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   bsf eax, eax
   or ecx, eax
   jmp @GotBinAndGroup
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GroupIsEmpty:
   {Try all groups greater than this group}
   mov eax, -2
@@ -9412,7 +9815,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   shl eax, 5
   or ecx, eax
   jmp @GotBinAndGroup
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @TrySequentialFeedMedium:
   mov ecx, MediumSequentialFeedBytesLeft
   {Block can be fed sequentially?}
@@ -9428,11 +9831,11 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   or ebx, IsMediumBlockFlag
   mov [eax - 4], ebx
   jmp @MediumBlockGetDone
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AllocateNewSequentialFeedForMedium:
   mov eax, ebx
   call AllocNewSequentialFeedMediumPool
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockGetDone:
 {$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
@@ -9449,7 +9852,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotBinAndGroup:
   {ebx = block size, ecx = bin number, edx = group number}
   push esi
@@ -9473,7 +9876,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jnz @MediumBinNotEmptyForMedium
   {Flag the group as empty}
   btr MediumBlockBinGroupBitmap, edx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBinNotEmptyForMedium:
   {esi = free block, ebx = block size}
   {Get the size of the available medium block in edi}
@@ -9494,11 +9897,11 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jb @GotMediumBlockForMedium
   call InsertMediumBlockIntoBin
   jmp @GotMediumBlockForMedium
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UseWholeBlockForMedium:
   {Mark this block as used in the block following it}
   and byte ptr [esi + edi - 4], not PreviousMediumBlockIsFreeFlag
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlockForMedium:
   {Set the size and flags for this block}
   lea ecx, [ebx + IsMediumBlockFlag]
@@ -9516,14 +9919,14 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @DontUnlMedBlkAftrGotMedBlkForMedium:
   mov eax, esi
   pop edi
   pop esi
   jmp @Exit
 {-------------------Large block allocation-------------------}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @IsALargeBlockRequest:
   test eax, eax
@@ -9533,16 +9936,18 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$ifndef AssumeMultiThreaded}
   pop ebp
 {$endif}
-  jmp AllocateLargeBlock
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  call AllocateLargeBlock
+  jmp @Final
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @DontAllocateLargeBlock:
   xor eax, eax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @Exit:
   pop ebx
 {$ifndef AssumeMultiThreaded}
   pop ebp
 {$endif}
+@Final:
 end;
 {$else}
 {64-bit BASM implementation}
@@ -9609,7 +10014,7 @@ asm
 {$else}
   jmp @LockSmallBlockType
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotLockOnSmallBlockType:
   {$ifdef SmallBlocksLockedCriticalSection}{$ifdef DebugAcquireLockByte}
   cmp al, cLockByteAvailable
@@ -9618,7 +10023,7 @@ asm
 {$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitSmallLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @AfterLockOnSmallBlockType:
 
   {Find the next free block: Get the first pool with free blocks in rdx}
@@ -9640,7 +10045,7 @@ asm
   mov [rax - BlockHeaderSize], rdx
   {Is the chunk now full?}
   jz @RemoveSmallPool
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
 {$ifndef AssumeMultiThreaded}
@@ -9656,7 +10061,7 @@ asm
 {$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @TrySmallSequentialFeed:
   {Try to feed a small block sequentially: Get the sequential feed block pool}
   mov rdx, TSmallBlockType[rbx].CurrentSequentialFeedPool
@@ -9673,7 +10078,7 @@ asm
   {Set the block header}
   mov [rax - BlockHeaderSize], rdx
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @RemoveSmallPool:
   {Pool is full - remove it from the partially free list}
   mov rcx, TSmallBlockPoolHeader[rdx].NextPartiallyFreePool
@@ -9683,7 +10088,7 @@ asm
 
 {===== START OF SMALL BLOCK LOCKING CODE; 64-BIT FASTGETMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @LockSmallBlockType:
 
@@ -9696,7 +10101,7 @@ asm
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @FirstBlockLocked:
   {Try the next size}
    add  rbx, rdx
@@ -9705,7 +10110,7 @@ asm
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @SecondBlockLocked:
   {Try the next size (up to two sizes larger)}
    add  rbx, rdx
@@ -9714,17 +10119,17 @@ asm
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @ThirdBlockLocked:
   {Block type and two sizes larger are all locked - give up and sleep}
    sub  rbx, rdx
    sub  rbx, rdx
    push  rcx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockTypeLoop:
   mov  edx, cSpinWaitLoopCount
   mov  eax, cLockByteLocked
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
   dec  edx
@@ -9748,7 +10153,7 @@ asm
   pop   rcx
   {Congratulations! We've got the lock!}
   jmp	@GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @SwitchToThread:
   call  SwitchToThreadIfSupported
   jmp   @LockSmallBlockTypeLoop
@@ -9803,7 +10208,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 
 {===== END OF SMALL BLOCK LOCKING CODE; 64-BIT FASTGETMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AllocateSmallBlockPool:
   {Do we need to lock the medium blocks?}
 {$ifndef AssumeMultiThreaded}
@@ -9818,7 +10223,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLockedForPool:
   {Are there any available blocks of a suitable size?}
   movsx esi, TSmallBlockType[rbx].AllowedGroupsForBlockPoolBitmap
@@ -9855,7 +10260,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jnz @MediumBinNotEmpty
   {Flag the group as empty}
   btr MediumBlockBinGroupBitmap, eax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBinNotEmpty:
   {esi = free block, ebx = block type}
   {Get the size of the available medium block in edi}
@@ -9877,7 +10282,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Put the remainder in a bin (it will be big enough)}
   call InsertMediumBlockIntoBin
   jmp @GotMediumBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NoSuitableMediumBlocks:
   {Check the sequential feed medium block pool for space}
   movzx ecx, TSmallBlockType[rbx].MinimumBlockPoolSize
@@ -9892,7 +10297,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   cmp edi, edx
   jb @NotMuchSpace
   mov edi, ecx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotMuchSpace:
   sub rsi, rdi
   {Update the sequential feed parameters}
@@ -9900,7 +10305,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov LastSequentiallyFedMediumBlock, rsi
   {Get the block pointer}
   jmp @GotMediumBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @AllocateNewSequentialFeed:
   {Need to allocate a new sequential feed medium block pool: use the
    optimal size for this small block pool}
@@ -9929,12 +10334,12 @@ but we don't need them at this point}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UseWholeBlock:
   {rsi = free block, rbx = block type, edi = block size}
   {Mark this block as used in the block following it}
   and byte ptr [rsi + rdi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlock:
   {rsi = free block, rbx = block type, edi = block size}
   {Set the size and flags for this block}
@@ -9958,7 +10363,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotLockedAftrGotMedBlk:
   {Set up the block pool}
   xor eax, eax
@@ -9979,7 +10384,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   mov [rax - BlockHeaderSize], rsi
   jmp @UnlockSmallBlockAndExit
 {-------------------Medium block allocation-------------------}
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @NotASmallBlock:
   cmp rcx, (MaximumMediumBlockSize - BlockHeaderSize)
   ja @IsALargeBlockRequest
@@ -10004,7 +10409,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
 {$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLocked:
   {Get the bin number in ecx and the group number in edx}
   lea edx, [ebx - MinimumMediumBlockSize]
@@ -10022,7 +10427,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   bsf eax, eax
   or ecx, eax
   jmp @GotBinAndGroup
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GroupIsEmpty:
   {Try all groups greater than this group}
   mov eax, -2
@@ -10039,7 +10444,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   shl eax, MediumBlockBinsPerGroupPowerOf2
   or ecx, eax
   jmp @GotBinAndGroup
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @TrySequentialFeedMedium:
   mov ecx, MediumSequentialFeedBytesLeft
   {Block can be fed sequentially?}
@@ -10055,11 +10460,11 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   or rbx, IsMediumBlockFlag
   mov [rax - BlockHeaderSize], rbx
   jmp @MediumBlockGetDone
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @AllocateNewSequentialFeedForMedium:
   mov ecx, ebx
   call AllocNewSequentialFeedMediumPool
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockGetDone:
 {$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMediumLocked)
@@ -10081,7 +10486,7 @@ but we don't need them at this point - we only save RAX}
 {$endif}
 
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotBinAndGroup:
   {ebx = block size, ecx = bin number, edx = group number}
   {Get a pointer to the bin in edi}
@@ -10106,7 +10511,7 @@ but we don't need them at this point - we only save RAX}
   jnz @MediumBinNotEmptyForMedium
   {Flag the group as empty}
   btr MediumBlockBinGroupBitmap, edx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBinNotEmptyForMedium:
   {rsi = free block, ebx = block size}
   {Get the size of the available medium block in edi}
@@ -10127,11 +10532,11 @@ but we don't need them at this point - we only save RAX}
   jb @GotMediumBlockForMedium
   call InsertMediumBlockIntoBin
   jmp @GotMediumBlockForMedium
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UseWholeBlockForMedium:
   {Mark this block as used in the block following it}
   and byte ptr [rsi + rdi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlockForMedium:
   {Set the size and flags for this block}
   lea rcx, [rbx + IsMediumBlockFlag]
@@ -10158,13 +10563,13 @@ but we don't need them at this point - we only save RAX}
 
   jmp @Done
 {-------------------Large block allocation-------------------}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @IsALargeBlockRequest:
   xor rax, rax
   test rcx, rcx
   js @Done
   call AllocateLargeBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @Done: {it automatically restores 4 registers from stack}
 {$ifndef AllowAsmParams}
  {$ifndef AssumeMultiThreaded}
@@ -10396,10 +10801,10 @@ begin
       begin
         {Remove this medium block pool from the linked list}
         Dec(PByte(APointer), MediumBlockPoolHeaderSize);
-        LPPreviousMediumBlockPoolHeader := PMediumBlockPoolHeader(APointer).PreviousMediumBlockPoolHeader;
-        LPNextMediumBlockPoolHeader := PMediumBlockPoolHeader(APointer).NextMediumBlockPoolHeader;
-        LPPreviousMediumBlockPoolHeader.NextMediumBlockPoolHeader := LPNextMediumBlockPoolHeader;
-        LPNextMediumBlockPoolHeader.PreviousMediumBlockPoolHeader := LPPreviousMediumBlockPoolHeader;
+        LPPreviousMediumBlockPoolHeader := PMediumBlockPoolHeader(APointer)^.PreviousMediumBlockPoolHeader;
+        LPNextMediumBlockPoolHeader := PMediumBlockPoolHeader(APointer)^.NextMediumBlockPoolHeader;
+        LPPreviousMediumBlockPoolHeader^.NextMediumBlockPoolHeader := LPNextMediumBlockPoolHeader;
+        LPNextMediumBlockPoolHeader^.PreviousMediumBlockPoolHeader := LPPreviousMediumBlockPoolHeader;
         if LMediumBlocksLocked then
         begin
           LMediumBlocksLocked := False;
@@ -10506,9 +10911,9 @@ begin
     {Get a pointer to the block pool}
     LPSmallBlockPool := PSmallBlockPoolHeader(LBlockHeader);
     {Get the block type}
-    LPSmallBlockType := LPSmallBlockPool.BlockType;
+    LPSmallBlockType := LPSmallBlockPool^.BlockType;
 {$ifdef ClearSmallAndMediumBlocksInFreeMem}
-    FillChar(APointer^, LPSmallBlockType.BlockSize - BlockHeaderSize, 0);
+    FillChar(APointer^, LPSmallBlockType^.BlockSize - BlockHeaderSize, 0);
 {$endif}
     {Lock the block type}
 {$ifdef LogLockContention}
@@ -10526,16 +10931,16 @@ begin
       {$ifndef DisablePauseAndSwitchToThread}
       if CpuFeaturePauseAndSwitch then
       begin
-        if not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if not AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
         begin
           LFailedToAcquireLock := True;
-          AcquireSpinLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+          AcquireSpinLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
         end;
       end else
       {$endif}
       begin
-        LFailedToAcquireLock := not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked);
-        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
+        LFailedToAcquireLock := not AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
+        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@(SmallBlockTypes[0])))
           {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
             shr SmallBlockTypeRecSizePowerOf2
           {$else}
@@ -10545,7 +10950,7 @@ begin
         EnterCriticalSection(SmallBlockCriticalSections[LSmallBlockCriticalSectionIndex]);
         if LFailedToAcquireLock then
         begin
-          if not AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+          if not AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           begin
             LSmallBlockWithoutLock := True;
           end;
@@ -10557,7 +10962,7 @@ begin
       while not (AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked)) do
       begin
 {$ifdef UseReleaseStack}
-        LPReleaseStack := @LPSmallBlockType.ReleaseStack[GetStackSlot];
+        LPReleaseStack := @(LPSmallBlockType^.ReleaseStack[GetStackSlot]);
         if (not LPReleaseStack^.IsFull) and LPReleaseStack^.Push(APointer) then
         begin
           {Block will be released later.}
@@ -10574,7 +10979,7 @@ begin
   {$endif}
 {$else}
         Sleep(InitialSleepTime);
-        if AcquireLockByte(LPSmallBlockType.SmallBlockTypeLocked) then
+        if AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked) then
           Break;
         Sleep(AdditionalSleepTime);
 {$endif}
@@ -10588,7 +10993,7 @@ begin
     if LDidSleep then
     begin
       GetStackTrace(@(LStackTrace[0]), StackTraceDepth, 1);
-      LPSmallBlockType.BlockCollector.Add(@(LStackTrace[0]), StackTraceDepth);
+      LPSmallBlockType^.BlockCollector.Add(@(LStackTrace[0]), StackTraceDepth);
     end;
 {$endif}
 {$ifdef UseReleaseStack}
@@ -10596,40 +11001,40 @@ begin
     begin
 {$endif}
       {Get the old first free block}
-      LOldFirstFreeBlock := LPSmallBlockPool.FirstFreeBlock;
+      LOldFirstFreeBlock := LPSmallBlockPool^.FirstFreeBlock;
       {Was the pool manager previously full?}
       if LOldFirstFreeBlock = nil then
       begin
         {Insert this as the first partially free pool for the block size}
-        LPOldFirstPool := LPSmallBlockType.NextPartiallyFreePool;
-        LPSmallBlockPool.NextPartiallyFreePool := LPOldFirstPool;
-        LPOldFirstPool.PreviousPartiallyFreePool := LPSmallBlockPool;
-        LPSmallBlockPool.PreviousPartiallyFreePool := PSmallBlockPoolHeader(LPSmallBlockType);
-        LPSmallBlockType.NextPartiallyFreePool := LPSmallBlockPool;
+        LPOldFirstPool := LPSmallBlockType^.NextPartiallyFreePool;
+        LPSmallBlockPool^.NextPartiallyFreePool := LPOldFirstPool;
+        LPOldFirstPool^.PreviousPartiallyFreePool := LPSmallBlockPool;
+        LPSmallBlockPool^.PreviousPartiallyFreePool := PSmallBlockPoolHeader(LPSmallBlockType);
+        LPSmallBlockType^.NextPartiallyFreePool := LPSmallBlockPool;
       end;
       {Store the old first free block}
       PNativeUInt(PByte(APointer) - BlockHeaderSize)^ := UIntPtr(LOldFirstFreeBlock) or IsFreeBlockFlag;
       {Store this as the new first free block}
-      LPSmallBlockPool.FirstFreeBlock := APointer;
+      LPSmallBlockPool^.FirstFreeBlock := APointer;
       {Decrement the number of allocated blocks}
-      Dec(LPSmallBlockPool.BlocksInUse);
+      Dec(LPSmallBlockPool^.BlocksInUse);
       {Small block pools are never freed in full debug mode. This increases the
        likehood of success in catching objects still being used after being
        destroyed.}
 {$ifndef FullDebugMode}
       {Is the entire pool now free? -> Free it.}
-      if LPSmallBlockPool.BlocksInUse = 0 then
+      if LPSmallBlockPool^.BlocksInUse = 0 then
       begin
         {Get the previous and next chunk managers}
-        LPPreviousPool := LPSmallBlockPool.PreviousPartiallyFreePool;
-        LPNextPool := LPSmallBlockPool.NextPartiallyFreePool;
+        LPPreviousPool := LPSmallBlockPool^.PreviousPartiallyFreePool;
+        LPNextPool := LPSmallBlockPool^.NextPartiallyFreePool;
         {Remove this manager}
-        LPPreviousPool.NextPartiallyFreePool := LPNextPool;
-        LPNextPool.PreviousPartiallyFreePool := LPPreviousPool;
+        LPPreviousPool^.NextPartiallyFreePool := LPNextPool;
+        LPNextPool^.PreviousPartiallyFreePool := LPPreviousPool;
         {Is this the sequential feed pool? If so, stop sequential feeding}
-        if (LPSmallBlockType.CurrentSequentialFeedPool = LPSmallBlockPool) then
+        if (LPSmallBlockType^.CurrentSequentialFeedPool = LPSmallBlockPool) then
         begin
-          LPSmallBlockType.MaxSequentialFeedBlockAddress := nil;
+          LPSmallBlockType^.MaxSequentialFeedBlockAddress := nil;
         end;
         {$ifndef AssumeMultiThreaded}
         if LWasMultithread then
@@ -10638,7 +11043,7 @@ begin
           {Unlock this block type}
           if not LSmallBlockWithoutLock then
           begin
-            ReleaseLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+            ReleaseLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
           end else
           begin
             LSmallBlockWithoutLock := False;
@@ -10665,7 +11070,7 @@ begin
       begin
 {$endif}
 {$ifdef UseReleaseStack}
-        LPReleaseStack := @LPSmallBlockType.ReleaseStack[GetStackSlot];
+        LPReleaseStack := @LPSmallBlockType^.ReleaseStack[GetStackSlot];
         if LPReleaseStack^.IsEmpty or (not LPReleaseStack^.Pop(APointer)) then
         begin
 {$endif}
@@ -10677,7 +11082,7 @@ begin
           {Unlock this block type}
             if not LSmallBlockWithoutLock then
             begin
-              ReleaseLockByte(LPSmallBlockType.SmallBlockTypeLocked);
+              ReleaseLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
             end else
             begin
               LSmallBlockWithoutLock := False;
@@ -10742,8 +11147,8 @@ asm
   {$ifdef fpc}
   test eax, eax
   jne @PointerNotNil
-  ret
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  jmp @Final
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @PointerNotNil:
   {$endif}
   {Get the block header in edx}
@@ -10798,7 +11203,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
 {$else}
   jmp @LockSmallBlockType
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotLockOnSmallBlockType:
   {$ifdef SmallBlocksLockedCriticalSection}{$ifdef DebugAcquireLockByte}
   cmp al, cLockByteAvailable
@@ -10807,7 +11212,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
 {$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitSmallLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @AfterLock:
   {Current state: edx = @SmallBlockPoolHeader, ecx = APointer, ebx = @SmallBlockType}
   {Decrement the number of blocks in use}
@@ -10828,7 +11233,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {All ok}
   xor eax, eax
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 
 @UnlockSmallBlockAndExit:
   {Unlock the block type}
@@ -10846,7 +11251,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Exit
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @SmallPoolWasFull:
   {Insert this as the first partially free pool for the block size}
   mov eax, TSmallBlockType[ebx].NextPartiallyFreePool
@@ -10857,7 +11262,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {All ok}
   xor eax, eax
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PoolIsNowEmpty:
   { mark the current block as released to prevent further call to FreeMem}
   mov dword ptr [ecx - BlockHeaderSize], IsFreeBlockFlag
@@ -10877,10 +11282,10 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {Is this the sequential feed pool? If so, stop sequential feeding}
   cmp TSmallBlockType[ebx].CurrentSequentialFeedPool, edx
   jne @NotSequentialFeedPool
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @IsSequentialFeedPool:
   mov TSmallBlockType[ebx].MaxSequentialFeedBlockAddress, eax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSequentialFeedPool:
   {Unlock the block type}
 {$ifndef AssumeMultiThreaded}
@@ -10895,7 +11300,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   lock
 {$endif}
   mov TSmallBlockType[ebx].SmallBlockTypeLocked, cLockByteAvailable
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontUnlckSmlBlkAftrNotSeqFdPl:
   {Release this pool}
   mov eax, edx
@@ -10904,7 +11309,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
 
 {===== START OF SMALL BLOCK LOCKING CODE; 32-BIT FASTFREEMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockType:
 {$ifdef SmallBlocksLockedCriticalSection}
   mov  eax, cLockByteLocked
@@ -10914,14 +11319,14 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   lock xchg TSmallBlockType([ebx]).SmallBlockTypeLocked, al
   cmp  al, cLockByteLocked
   jne  @GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @PrepareForSpinLoop:
   push edx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockTypeLoop:
   mov  edx, cSpinWaitLoopCount
   mov  eax, cLockByteLocked
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
   dec  edx
@@ -10945,7 +11350,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   {Congratulations! We've got the lock!}
   pop  edx
   jmp	@GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
   @SwitchToThread:
   push  ebx
   push  ecx
@@ -11013,12 +11418,12 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 
 
   {---------------------Medium blocks------------------------------}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallBlockInUse:
   {Not a small block in use: is it a medium or large block?}
   test dl, IsFreeBlockFlag + IsLargeBlockFlag
   jnz @NotASmallOrMediumBlock
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @FreeMediumBlock:
 {$ifdef ClearSmallAndMediumBlocksInFreeMem}
   push eax
@@ -11056,7 +11461,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$ifndef AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLocked:
   {Can we combine this block with the next free block?}
   test dword ptr [esi + ebx - BlockHeaderSize], IsFreeBlockFlag
@@ -11066,20 +11471,20 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Set the "PreviousIsFree" flag in the next block}
   or ecx, PreviousMediumBlockIsFreeFlag
   mov [esi + ebx - BlockHeaderSize], ecx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextBlockChecked:
   {Can we combine this block with the previous free block? We need to
    re-read the flags since it could have changed before we could lock the
    medium blocks.}
   test byte ptr [esi - 4], PreviousMediumBlockIsFreeFlag
   jnz @PreviousBlockIsFree
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockChecked:
   {Is the entire medium block pool free, and there are other free blocks
    that can fit the largest possible medium block -> free it.}
   cmp ebx, (MediumBlockPoolSize - MediumBlockPoolHeaderSize)
   je @EntireMediumPoolFree
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinFreeMediumBlock:
   {Store the size of the block as well as the flags}
   lea eax, [ebx + IsMediumBlockFlag + IsFreeBlockFlag]
@@ -11106,14 +11511,14 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @DontUnlckMedBlksAftrBinFrMedBlk:
   {All OK}
   xor eax, eax
   {Restore registers}
   pop esi
   jmp @Exit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextBlockIsFree:
   {Get the next block address in eax}
   lea eax, [esi + ebx]
@@ -11125,7 +11530,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jb @NextBlockChecked
   call RemoveMediumFreeBlock
   jmp @NextBlockChecked
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockIsFree:
   {Get the size of the free block just before this one}
   mov ecx, [esi - 8]
@@ -11139,7 +11544,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov eax, esi
   call RemoveMediumFreeBlock
   jmp @PreviousBlockChecked
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @EntireMediumPoolFree:
   {Should we make this the new sequential feed medium block pool? If the
    current sequential feed pool is not entirely free, we make this the new
@@ -11166,7 +11571,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
 {$ifdef ClearMediumBlockPoolsBeforeReturningToOS}
   mov eax, esi
@@ -11186,7 +11591,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Restore registers}
   pop esi
   jmp @Exit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MakeEmptyMediumPoolSequentialFeed:
   {Get a pointer to the end-marker block}
   lea ebx, [esi + MediumBlockPoolSize - MediumBlockPoolHeaderSize]
@@ -11212,14 +11617,14 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @DontUnlckMedBlksAftrMkEmptMedPlSeqFd:
   {Success}
   xor eax, eax
   {Restore registers}
   pop esi
   jmp @Exit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotASmallOrMediumBlock:
   {Is it in fact a large block?}
   test dl, IsFreeBlockFlag + IsMediumBlockFlag
@@ -11228,17 +11633,19 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$ifndef AssumeMultiThreaded}
   pop ebp
 {$endif}
-  jmp FreeLargeBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  call FreeLargeBlock
+  jmp @Final
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontFreeLargeBlock:
   {Attempt to free an already free block}
   mov eax, -1
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Exit:
   pop ebx
 {$ifndef AssumeMultiThreaded}
   pop ebp
 {$endif}
+@Final:
 end;
 
 {$else 32Bit}
@@ -11302,7 +11709,7 @@ asm
 {$else}
   jmp @LockSmallBlockType
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GotLockOnSmallBlockType:
   {$ifdef SmallBlocksLockedCriticalSection}{$ifdef DebugAcquireLockByte}
   cmp al, cLockByteAvailable
@@ -11311,7 +11718,7 @@ asm
 {$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitSmallLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @AfterLockOnSmallBlockType:
    call @FreememMain
 
@@ -11353,7 +11760,7 @@ asm
   jz @SmallPoolWasFull
   {All ok}
   xor eax, eax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @UnlockSmallBlockAndExit:
   ret
 
@@ -11372,7 +11779,7 @@ asm
 {$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @SmallPoolWasFull:
   {Insert this as the first partially free pool for the block size}
   mov rcx, TSmallBlockType[rbx].NextPartiallyFreePool
@@ -11383,7 +11790,7 @@ asm
   {All ok}
   xor eax, eax
   jmp @UnlockSmallBlockAndExit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PoolIsNowEmpty:
   { mark the current block as released to prevent further call to FreeMem}
   mov dword ptr [rcx-BlockHeaderSize], IsFreeBlockFlag
@@ -11403,10 +11810,10 @@ asm
   {Is this the sequential feed pool? If so, stop sequential feeding}
   cmp TSmallBlockType[rbx].CurrentSequentialFeedPool, rdx
   jne @NotSequentialFeedPool
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @IsSequentialFeedPool:
   mov TSmallBlockType[rbx].MaxSequentialFeedBlockAddress, rax
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSequentialFeedPool:
   {Unlock the block type}
 {$ifndef AssumeMultiThreaded}
@@ -11421,7 +11828,7 @@ asm
   lock
 {$endif}
   mov TSmallBlockType[rbx].SmallBlockTypeLocked, cLockByteAvailable
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontRelSmlBlkAftrNotSeqFdPl:
   {Release this pool}
   mov rcx, rdx
@@ -11430,7 +11837,7 @@ asm
 
 {===== START OF SMALL BLOCK LOCKING CODE; 64-BIT FASTFREEMEM =====}
 
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockType:
 
 {$ifdef SmallBlocksLockedCriticalSection}
@@ -11454,7 +11861,7 @@ asm
    cmp  al, cLockByteLocked
    jne  @GotLockOnSmallBlockType
 
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @PrepareForSpinLoop:
    mov rax, rcx
    lock xchg TSmallBlockType([rbx]).FreeBlockLater, rax
@@ -11466,11 +11873,11 @@ asm
 
    push rcx
    push rdx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @LockSmallBlockTypeLoop:
    mov  eax, cLockByteLocked
    mov  edx, cSpinWaitLoopCount
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -11495,7 +11902,7 @@ asm
    pop  rdx
    pop  rcx
    jmp	@GotLockOnSmallBlockType
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @SwitchToThread:
    call  SwitchToThreadIfSupported
    jmp   @LockSmallBlockTypeLoop
@@ -11547,12 +11954,12 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {===== END OF SMALL BLOCK LOCKING CODE; 64-BIT FASTFREEMEM =====}
 
   {---------------------Medium blocks------------------------------}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallBlockInUse:
   {Not a small block in use: is it a medium or large block?}
   test dl, IsFreeBlockFlag + IsLargeBlockFlag
   jnz @NotASmallOrMediumBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @FreeMediumBlock:
 {$ifdef ClearSmallAndMediumBlocksInFreeMem}
   mov rsi, rcx
@@ -11587,7 +11994,7 @@ in nonvolatile (callee-saved) registers like  RBX, RSI, and R12}
 {$ifndef AssumeMultiThreaded}
   or r12b, (UnsignedBit shl StateBitMediumLocked)
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlocksLocked:
   {Can we combine this block with the next free block?}
   test qword ptr [rsi + rbx - BlockHeaderSize], IsFreeBlockFlag
@@ -11597,20 +12004,20 @@ in nonvolatile (callee-saved) registers like  RBX, RSI, and R12}
   {Set the "PreviousIsFree" flag in the next block}
   or rcx, PreviousMediumBlockIsFreeFlag
   mov [rsi + rbx - BlockHeaderSize], rcx
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextBlockChecked:
   {Can we combine this block with the previous free block? We need to
    re-read the flags since it could have changed before we could lock the
    medium blocks.}
   test byte ptr [rsi - BlockHeaderSize], PreviousMediumBlockIsFreeFlag
   jnz @PreviousBlockIsFree
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockChecked:
   {Is the entire medium block pool free, and there are other free blocks
    that can fit the largest possible medium block -> free it.}
   cmp ebx, (MediumBlockPoolSize - MediumBlockPoolHeaderSize)
   je @EntireMediumPoolFree
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @BinFreeMediumBlock:
   {Store the size of the block as well as the flags}
   lea rax, [rbx + IsMediumBlockFlag + IsFreeBlockFlag]
@@ -11644,7 +12051,7 @@ but we don't need them at this point}
 {$endif}
   xor eax, eax
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextBlockIsFree:
   {Get the next block address in rax}
   lea rax, [rsi + rbx]
@@ -11657,7 +12064,7 @@ but we don't need them at this point}
   mov rcx, rax
   call RemoveMediumFreeBlock
   jmp @NextBlockChecked
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockIsFree:
   {Get the size of the free block just before this one}
   mov rcx, [rsi - 2 * BlockHeaderSize]
@@ -11671,7 +12078,7 @@ but we don't need them at this point}
   mov rcx, rsi
   call RemoveMediumFreeBlock
   jmp @PreviousBlockChecked
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @EntireMediumPoolFree:
   {Should we make this the new sequential feed medium block pool? If the
    current sequential feed pool is not entirely free, we make this the new
@@ -11702,7 +12109,7 @@ but we don't need them at this point}
 {$endif}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
 {$ifdef ClearMediumBlockPoolsBeforeReturningToOS}
   mov rcx, rsi
@@ -11720,7 +12127,7 @@ but we don't need them at this point}
   {Return 0 on all ok}
   sbb eax, eax
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MakeEmptyMediumPoolSequentialFeed:
   {Get a pointer to the end-marker block}
   lea rbx, [rsi + MediumBlockPoolSize - MediumBlockPoolHeaderSize]
@@ -11754,7 +12161,7 @@ but we don't need them at this point}
 {$endif}
   xor eax, eax
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotASmallOrMediumBlock:
   {Attempt to free an already free block?}
   mov eax, -1
@@ -11762,7 +12169,7 @@ but we don't need them at this point}
   test dl, IsFreeBlockFlag + IsMediumBlockFlag
   jnz @Done
   call FreeLargeBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @Done: {automatically restores registers from stack by implicitly inserting pop instructions (rbx, rsi and r12)}
 {$ifndef AllowAsmParams}
   {$ifndef AssumeMultiThreaded}
@@ -11771,6 +12178,7 @@ but we don't need them at this point}
    pop rsi
    pop rbx
 {$endif}
+@Final:
 end;
 {$endif 32Bit}
 {$endif FastFreememNeedAssemberCode}
@@ -11960,9 +12368,9 @@ begin
   begin
     {-----------------------------------Small block-------------------------------------}
     {The block header is a pointer to the block pool: Get the block type}
-    LPSmallBlockType := PSmallBlockPoolHeader(LBlockHeader).BlockType;
+    LPSmallBlockType := PSmallBlockPoolHeader(LBlockHeader)^.BlockType;
     {Get the available size inside blocks of this type.}
-    LOldAvailableSize := LPSmallBlockType.BlockSize - BlockHeaderSize;
+    LOldAvailableSize := LPSmallBlockType^.BlockSize - BlockHeaderSize;
     {Is it an upsize or a downsize?}
     if LOldAvailableSize >= NativeUInt(ANewSize) then
     begin
@@ -12020,7 +12428,7 @@ begin
         {Do we need to store the requested size? Only large blocks store the
          requested size.}
         if LNewAllocSize > (MaximumMediumBlockSize - BlockHeaderSize) then
-          PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
+          PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
         {Move the data across}
 {$ifdef UseCustomFixedSizeMoveRoutines}
         LPSmallBlockType.UpsizeMoveProcedure(APointer^, Result^, LOldAvailableSize);
@@ -12135,7 +12543,7 @@ begin
         begin
           {If it's a large block - store the actual user requested size}
           if LNewAllocSize > (MaximumMediumBlockSize - BlockHeaderSize) then
-            PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize).UserAllocatedSize := ANewSize;
+            PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
           {Move the data across}
 {$ifdef UseCustomVariableSizeMoveRoutines}
    {$ifdef Align32Bytes}
@@ -12261,19 +12669,19 @@ asm
   mov eax, edx
   call FastGetMem
   mov [esi], eax
-  {$ifdef AsmCodeAlign}.align 2{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @SizeIsZero:
   pop esi
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Final
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PointerNotNil:
   test edx, edx
   jne @GoRealloc
   call FastFreeMem
-  mov [esi], 0
+  mov dword ptr [esi], 0
   pop esi
-  ret
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  jmp @Final
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @GoRealloc:
 {$endif}
   {On entry: eax = APointer; edx = ANewSize}
@@ -12353,7 +12761,7 @@ asm
   {Return the pointer}
   mov eax, ebx
   jmp @Exit2Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @SmallUpsize:
   {State: esi = APointer, edx = ANewSize, ecx = Current Block Size, ebx = Current Block Type}
   {This pointer is being reallocated to a larger block and therefore it is
@@ -12384,7 +12792,7 @@ asm
   jbe @NotSmallUpsizeToLargeBlock
   {Store the user requested size}
   mov [eax - 8], edi
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallUpsizeToLargeBlock:
   {Get the size to move across}
   movzx ecx, TSmallBlockType[ebx].BlockSize
@@ -12407,7 +12815,7 @@ asm
   {Done}
   mov eax, edi
   jmp @Exit3Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotASmallBlock:
   {Is this a medium block or a large block?}
   test cl, IsFreeBlockFlag + IsLargeBlockFlag
@@ -12457,7 +12865,7 @@ asm
   {Is it already at the minimum medium block size?}
   cmp ecx, edx
   jna @Exit4Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockInPlaceDownsize:
   {Round up to the next medium block size}
   lea ebp, [edx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
@@ -12492,7 +12900,7 @@ asm
    locked.}
   mov ebx, ExtractMediumAndLargeFlagsMask
   and ebx, [esi - 4]
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoMediumInPlaceDownsize:
   {Set the new size}
   or ebx, ebp
@@ -12507,7 +12915,7 @@ asm
   or edx, PreviousMediumBlockIsFreeFlag
   mov [edi - 4], edx
   jmp @MediumDownsizeDoSplit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeNextBlockFree:
   {The next block is free: combine it}
   mov eax, edi
@@ -12517,7 +12925,7 @@ asm
   cmp edx, MinimumMediumBlockSize
   jb @MediumDownsizeDoSplit
   call RemoveMediumFreeBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeDoSplit:
   {Store the trailing size field}
   mov [edi - 8], ebx
@@ -12530,7 +12938,7 @@ asm
   lea eax, [esi + ebp]
   mov edx, ebx
   call InsertMediumBlockIntoBin
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockDownsizeDone:
   {Result = old pointer}
   mov eax, esi
@@ -12550,7 +12958,7 @@ asm
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit4Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeRealloc:
   {Save the requested size}
   mov edi, edx
@@ -12583,7 +12991,7 @@ asm
   {Return the result}
   mov eax, ebp
   jmp @Exit4Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockUpsize:
   {Status: ecx = Current Block Size - 4, bl = Current Block Flags,
    edi = @Next Block, eax/esi = APointer, edx = Requested Size}
@@ -12632,7 +13040,7 @@ asm
   {Can the block still fit?}
   cmp edx, ebp
   ja @NextMediumBlockChanged
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoMediumInPlaceUpsize:
   {Is the next block binnable?}
   cmp eax, MinimumMediumBlockSize
@@ -12644,7 +13052,7 @@ asm
   call RemoveMediumFreeBlock
   pop edx
   pop ecx
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MediumInPlaceNoNextRemove:
   {Medium blocks grow a minimum of 25% in in-place upsizes}
   mov eax, ecx
@@ -12670,7 +13078,7 @@ asm
   add ebp, 4
   {Upsize done}
   jmp @MediumUpsizeInPlaceDone
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumInPlaceUpsizeSplit:
   {Store the size of the second split as the second last dword}
   mov [esi + ebp - 4], edx
@@ -12682,7 +13090,7 @@ asm
   jb @MediumUpsizeInPlaceDone
   add eax, esi
   call InsertMediumBlockIntoBin
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumUpsizeInPlaceDone:
   {Set the size and flags for this block}
   or ebp, ebx
@@ -12707,7 +13115,7 @@ asm
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
   jmp @Exit4Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextMediumBlockChanged:
 {$ifndef AssumeMultiThreaded}
   test byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
@@ -12727,7 +13135,7 @@ asm
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 
 @DontUnlMedBlksAftrNxtMedBlkChg:
 
@@ -12759,7 +13167,7 @@ asm
   cmp ebp, MaximumMediumBlockSize - BlockHeaderSize
   jbe @MediumUpsizeNotLarge
   mov [eax - 8], edx
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MediumUpsizeNotLarge:
   {Save the result}
   mov ebp, eax
@@ -12782,7 +13190,7 @@ asm
   {Restore the result}
   mov eax, ebp
   jmp @Exit4Reg
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PossibleLargeBlock:
   {-----------------------Large block------------------------------}
   {Restore registers}
@@ -12826,6 +13234,7 @@ asm
 {$ifdef fpc}
 @FpcExitStrackRestored:
 {$endif}
+@Final:
 end;
 
 {$else}
@@ -12895,7 +13304,7 @@ asm
   {In-place downsize - return the original pointer}
   mov rax, rsi
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallInPlaceDownsize:
   {Save the requested size}
   mov rbx, rdx
@@ -12933,7 +13342,7 @@ asm
   {Return the pointer}
   mov rax, rbx
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @SmallUpsize:
   {State: rsi = APointer, rdx = ANewSize, rcx = Current Block Size, rbx = Current Block Type}
   {This pointer is being reallocated to a larger block and therefore it is
@@ -12962,7 +13371,7 @@ asm
   jbe @NotSmallUpsizeToLargeBlock
   {Store the user requested size}
   mov [rax - 2 * BlockHeaderSize], rdi
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallUpsizeToLargeBlock:
   {Get the size to move across}
   movzx r8d, TSmallBlockType[rbx].BlockSize
@@ -12985,7 +13394,7 @@ asm
   {Done}
   mov rax, rdi
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotASmallBlock:
   {Is this a medium block or a large block?}
   test cl, IsFreeBlockFlag + IsLargeBlockFlag
@@ -13011,11 +13420,11 @@ asm
   lea r15, [rdx + rdx]
   cmp r15, rcx
   jb @MediumMustDownsize
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumNoResize:
   mov rax, rsi
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumMustDownsize:
   {In-place downsize? Balance the cost of moving the data vs. the cost of
    fragmenting the memory pool. Medium blocks in use may never be smaller
@@ -13035,7 +13444,7 @@ asm
   {Is it already at the minimum medium block size?}
   cmp ecx, edx
   jna @MediumNoResize
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MediumBlockInPlaceDownsize:
   {Round up to the next medium block size}
   lea r15, [rdx + BlockHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset]
@@ -13066,7 +13475,7 @@ asm
    locked.}
   mov rbx, ExtractMediumAndLargeFlagsMask
   and rbx, [rsi - BlockHeaderSize]
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoMediumInPlaceDownsize:
   {Set the new size}
   or rbx, r15
@@ -13081,7 +13490,7 @@ asm
   or rdx, PreviousMediumBlockIsFreeFlag
   mov [rdi - BlockHeaderSize], rdx
   jmp @MediumDownsizeDoSplit
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeNextBlockFree:
   {The next block is free: combine it}
   mov rcx, rdi
@@ -13091,7 +13500,7 @@ asm
   cmp edx, MinimumMediumBlockSize
   jb @MediumDownsizeDoSplit
   call RemoveMediumFreeBlock
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeDoSplit:
   {Store the trailing size field}
   mov [rdi - 2 * BlockHeaderSize], rbx
@@ -13104,7 +13513,7 @@ asm
   lea rcx, [rsi + r15]
   mov rdx, rbx
   call InsertMediumBlockIntoBin
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockDownsizeDone:
   {Result = old pointer}
   mov rax, rsi
@@ -13129,7 +13538,7 @@ but we don't need them at this point, since we are about to exit}
 {$endif}
 
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeRealloc:
   {Save the requested size}
   mov rdi, rdx
@@ -13162,7 +13571,7 @@ but we don't need them at this point, since we are about to exit}
   {Return the result}
   mov rax, r15
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumBlockUpsize:
   {Status: ecx = Current Block Size - BlockHeaderSize, bl = Current Block Flags,
    rdi = @Next Block, rsi = APointer, rdx = Requested Size}
@@ -13214,7 +13623,7 @@ but we don't need them at this point, since we are about to exit}
   {Can the block still fit?}
   cmp rdx, r15
   ja @NextMediumBlockChanged
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoMediumInPlaceUpsize:
   {Is the next block binnable?}
   cmp eax, MinimumMediumBlockSize
@@ -13226,7 +13635,7 @@ but we don't need them at this point, since we are about to exit}
   call RemoveMediumFreeBlock
   mov rcx, r14
   mov rdx, rdi
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MediumInPlaceNoNextRemove:
   {Medium blocks grow a minimum of 25% in in-place upsizes}
   mov eax, ecx
@@ -13252,7 +13661,7 @@ but we don't need them at this point, since we are about to exit}
   add r15, BlockHeaderSize
   {Upsize done}
   jmp @MediumUpsizeInPlaceDone
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @MediumInPlaceUpsizeSplit:
   {Store the size of the second split as the second last dword}
   mov [rsi + r15 - BlockHeaderSize], rdx
@@ -13264,7 +13673,7 @@ but we don't need them at this point, since we are about to exit}
   jb @MediumUpsizeInPlaceDone
   lea rcx, [rsi + rax]
   call InsertMediumBlockIntoBin
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumUpsizeInPlaceDone:
   {Set the size and flags for this block}
   or r15, rbx
@@ -13292,7 +13701,7 @@ but we don't need them at this point, since we are about to exit}
 {$endif}
 
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NextMediumBlockChanged:
   {The next medium block changed while the medium blocks were being locked}
 {$ifndef AssumeMultiThreaded}
@@ -13316,7 +13725,7 @@ so ew save RCX and RDX}
   mov MediumBlocksLocked, cLockByteAvailable
 {$endif}
 
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 
 @DontUnlMedBlksAftrNxtMedBlkChg:
 
@@ -13350,7 +13759,7 @@ so ew save RCX and RDX}
   cmp r15, MaximumMediumBlockSize - BlockHeaderSize
   jbe @MediumUpsizeNotLarge
   mov [rax - 2 * BlockHeaderSize], rdx
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MediumUpsizeNotLarge:
   {Save the result}
   mov r15, rax
@@ -13373,7 +13782,7 @@ so ew save RCX and RDX}
   {Restore the result}
   mov rax, r15
   jmp @Done
-  {$ifdef AsmCodeAlign}.align 8{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @PossibleLargeBlock:
   {-----------------------Large block------------------------------}
   {Is this a valid large block?}
@@ -13383,10 +13792,10 @@ so ew save RCX and RDX}
   call ReallocateLargeBlock
   jmp @Done
   {-----------------------Invalid block------------------------------}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Error:
   xor eax, eax
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @Done: {restores registers from stack}
 {$ifndef AllowAsmParams}
   pop r15
@@ -13470,7 +13879,7 @@ asm
   fldz
   {Clear groups of 8 bytes. Block sizes are always four less than a multiple
    of 8.}
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @FillLoop:
   fst qword ptr [edx + ebx]
   add ebx, 8
@@ -13480,10 +13889,10 @@ asm
   {Correct the stack top}
   fincstp
   {Clear the last four bytes}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @ClearLastDWord:
   mov [edx], ecx
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Done:
   pop ebx
 end;
@@ -13534,11 +13943,11 @@ asm
   pop  rdi
   jmp  @Done
   {Clear the last 8 bytes}
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @ClearLastQWord:
   xor rcx, rcx
   mov [rdx], rcx
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Done:
 {$ifndef AllowAsmParams}
   pop rbx
@@ -13561,9 +13970,10 @@ asm
   test edx, edx
   jne @SizeNotZero
   mov eax, 0
-  ret
+  jmp @Final
 @SizeNotZero:
   call FastFreeMem
+@Final:
 {$endif}
 end;
 
@@ -14024,7 +14434,7 @@ asm
   {On entry: eax = AStartValue, edx = APointer; ecx = ACount}
   add edx, ecx
   neg ecx
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @AddLoop:
   add eax, [edx + ecx]
   add ecx, 4
@@ -14035,7 +14445,7 @@ asm
   add rdx, r8
   neg r8
   mov rax, rcx
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @AddLoop:
   add rax, [rdx + r8]
   add r8, 8
@@ -14053,27 +14463,27 @@ asm
   {On entry: eax = APointer; edx = ACount; ecx = AFillPattern}
   add eax, edx
   neg edx
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @CheckLoop:
   cmp [eax + edx], ecx
   jne @Done
   add edx, 4
   js @CheckLoop
 @Done:
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
   sete al
 {$else}
   {On entry: rcx = APointer; rdx = ACount; r8 = AFillPattern}
   .noframe
   add rcx, rdx
   neg rdx
-  {$ifdef AsmCodeAlign}.align 16{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
 @CheckLoop:
   cmp [rcx + rdx], r8
   jne @Done
   add rdx, 8
   js @CheckLoop
-  {$ifdef AsmCodeAlign}.align 4{$endif}
+  {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @Done:
   sete al
 {$endif}
@@ -15134,7 +15544,7 @@ begin
         LPMediumBlock := NextMediumBlock(LPMediumBlock);
       end;
       {Get the next medium block pool}
-      LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+      LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
     end;
     {Scan large blocks}
     LPLargeBlock := LargeBlocksCircularList.NextLargeBlockHeader;
@@ -15151,7 +15561,7 @@ begin
       else
         RaiseMemoryCorruptionError;
       {Get the next large block}
-      LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+      LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
     end;
   finally
     {Unblock the FullDebugMode memory manager routines.}
@@ -15426,68 +15836,68 @@ begin
   while LPInsertAfter <> nil do
   begin
     {Too big?}
-    if LPInsertAfter.LeakSize > APNewEntry.LeakSize then
+    if LPInsertAfter^.LeakSize > APNewEntry^.LeakSize then
     begin
-      LPInsertAfter := LPInsertAfter.PreviousLeak;
+      LPInsertAfter := LPInsertAfter^.PreviousLeak;
       Break;
     end;
     {Find a matching entry. If an exact size match is not required and the leak
      is larger than the current entry, use it if the expected size of the next
      entry is too large.}
-    if (UIntPtr(LPInsertAfter.LeakAddress) = UIntPtr(APNewEntry.LeakAddress))
-      and ((UIntPtr(LPInsertAfter.LeakedClass) = UIntPtr(APNewEntry.LeakedClass))
+    if (UIntPtr(LPInsertAfter^.LeakAddress) = UIntPtr(APNewEntry^.LeakAddress))
+      and ((UIntPtr(LPInsertAfter^.LeakedClass) = UIntPtr(APNewEntry^.LeakedClass))
       {$ifdef CheckCppObjectTypeEnabled}
-       or (LPInsertAfter.LeakedCppTypeIdPtr = APNewEntry.LeakedCppTypeIdPtr)
+       or (LPInsertAfter^.LeakedCppTypeIdPtr = APNewEntry.LeakedCppTypeIdPtr)
       {$endif}
       )
-      and ((LPInsertAfter.LeakSize = APNewEntry.LeakSize)
+      and ((LPInsertAfter^.LeakSize = APNewEntry^.LeakSize)
         or ((not AExactSizeMatch)
-          and (LPInsertAfter.LeakSize < APNewEntry.LeakSize)
-          and ((LPInsertAfter.NextLeak = nil)
-            or (LPInsertAfter.NextLeak.LeakSize > APNewEntry.LeakSize))
+          and (LPInsertAfter^.LeakSize < APNewEntry^.LeakSize)
+          and ((LPInsertAfter^.NextLeak = nil)
+            or (LPInsertAfter^.NextLeak^.LeakSize > APNewEntry^.LeakSize))
           )) then
     begin
-      if (LPInsertAfter.LeakCount + APNewEntry.LeakCount) >= 0 then
+      if (LPInsertAfter^.LeakCount + APNewEntry^.LeakCount) >= 0 then
       begin
-        Inc(LPInsertAfter.LeakCount, APNewEntry.LeakCount);
+        Inc(LPInsertAfter^.LeakCount, APNewEntry^.LeakCount);
         {Is the count now 0?}
-        if LPInsertAfter.LeakCount = 0 then
+        if LPInsertAfter^.LeakCount = 0 then
         begin
           {Delete the entry}
-          if LPInsertAfter.NextLeak <> nil then
-            LPInsertAfter.NextLeak.PreviousLeak := LPInsertAfter.PreviousLeak;
-          if LPInsertAfter.PreviousLeak <> nil then
-            LPInsertAfter.PreviousLeak.NextLeak := LPInsertAfter.NextLeak
+          if LPInsertAfter^.NextLeak <> nil then
+            LPInsertAfter^.NextLeak^.PreviousLeak := LPInsertAfter^.PreviousLeak;
+          if LPInsertAfter^.PreviousLeak <> nil then
+            LPInsertAfter^.PreviousLeak^.NextLeak := LPInsertAfter^.NextLeak
           else
-            APLeakList^ := LPInsertAfter.NextLeak;
+            APLeakList^ := LPInsertAfter^.NextLeak;
           {Insert it as the first free slot}
-          LPInsertAfter.NextLeak := ExpectedMemoryLeaks.FirstFreeSlot;
-          ExpectedMemoryLeaks.FirstFreeSlot := LPInsertAfter;
+          LPInsertAfter^.NextLeak := ExpectedMemoryLeaks^.FirstFreeSlot;
+          ExpectedMemoryLeaks^.FirstFreeSlot := LPInsertAfter;
         end;
         Result := True;
       end;
       Exit;
     end;
     {Next entry}
-    if LPInsertAfter.NextLeak <> nil then
-      LPInsertAfter := LPInsertAfter.NextLeak
+    if LPInsertAfter^.NextLeak <> nil then
+      LPInsertAfter := LPInsertAfter^.NextLeak
     else
       Break;
   end;
-  if APNewEntry.LeakCount > 0 then
+  if APNewEntry^.LeakCount > 0 then
   begin
     {Get a position for the entry}
-    LPNewEntry := ExpectedMemoryLeaks.FirstFreeSlot;
+    LPNewEntry := ExpectedMemoryLeaks^.FirstFreeSlot;
     if LPNewEntry <> nil then
     begin
-      ExpectedMemoryLeaks.FirstFreeSlot := LPNewEntry.NextLeak;
+      ExpectedMemoryLeaks^.FirstFreeSlot := LPNewEntry^.NextLeak;
     end
     else
     begin
-      if ExpectedMemoryLeaks.EntriesUsed < Length(ExpectedMemoryLeaks.ExpectedLeaks) then
+      if ExpectedMemoryLeaks^.EntriesUsed < Length(ExpectedMemoryLeaks^.ExpectedLeaks) then
       begin
-        LPNewEntry := @ExpectedMemoryLeaks.ExpectedLeaks[ExpectedMemoryLeaks.EntriesUsed];
-        Inc(ExpectedMemoryLeaks.EntriesUsed);
+        LPNewEntry := @ExpectedMemoryLeaks^.ExpectedLeaks[ExpectedMemoryLeaks^.EntriesUsed];
+        Inc(ExpectedMemoryLeaks^.EntriesUsed);
       end
       else
       begin
@@ -15498,19 +15908,19 @@ begin
     {Set the entry}
     LPNewEntry^ := APNewEntry^;
     {Insert it into the list}
-    LPNewEntry.PreviousLeak := LPInsertAfter;
+    LPNewEntry^.PreviousLeak := LPInsertAfter;
     if LPInsertAfter <> nil then
     begin
-      LPNewEntry.NextLeak := LPInsertAfter.NextLeak;
-      if LPNewEntry.NextLeak <> nil then
-        LPNewEntry.NextLeak.PreviousLeak := LPNewEntry;
-      LPInsertAfter.NextLeak := LPNewEntry;
+      LPNewEntry^.NextLeak := LPInsertAfter^.NextLeak;
+      if LPNewEntry^.NextLeak <> nil then
+        LPNewEntry^.NextLeak^.PreviousLeak := LPNewEntry;
+      LPInsertAfter^.NextLeak := LPNewEntry;
     end
     else
     begin
-      LPNewEntry.NextLeak := APLeakList^;
-      if LPNewEntry.NextLeak <> nil then
-        LPNewEntry.NextLeak.PreviousLeak := LPNewEntry;
+      LPNewEntry^.NextLeak := APLeakList^;
+      if LPNewEntry^.NextLeak <> nil then
+        LPNewEntry^.NextLeak^.PreviousLeak := LPNewEntry;
       APLeakList^ := LPNewEntry;
     end;
     Result := True;
@@ -15566,7 +15976,7 @@ begin
   LNewEntry.LeakCount := 1;
   {Add it to the correct list}
   Result := LockExpectedMemoryLeaksList
-    and UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryByAddress, @LNewEntry);
+    and UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryByAddress, @LNewEntry);
 {$ifndef AssumeMultiThreaded}
   if IsMultiThread then
 {$endif}
@@ -15587,7 +15997,7 @@ begin
   LNewEntry.LeakCount := ACount;
   {Add it to the correct list}
   Result := LockExpectedMemoryLeaksList
-    and UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryByClass, @LNewEntry);
+    and UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryByClass, @LNewEntry);
 {$ifndef AssumeMultiThreaded}
   if IsMultiThread then
 {$endif}
@@ -15644,7 +16054,7 @@ begin
   LNewEntry.LeakCount := ACount;
   {Add it to the correct list}
   Result := LockExpectedMemoryLeaksList
-    and UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryBySizeOnly, @LNewEntry);
+    and UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryBySizeOnly, @LNewEntry);
 {$ifndef AssumeMultiThreaded}
   if IsMultiThread then
 {$endif}
@@ -15669,7 +16079,7 @@ begin
   LNewEntry.LeakCount := -1;
   {Remove it from the list}
   Result := LockExpectedMemoryLeaksList
-    and UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryByAddress, @LNewEntry);
+    and UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryByAddress, @LNewEntry);
 {$ifndef AssumeMultiThreaded}
   if IsMultiThread then
 {$endif}
@@ -15706,18 +16116,18 @@ function GetRegisteredMemoryLeaks: TRegisteredMemoryLeaks;
       SetLength(Result, LInd + 1);
       {Add the entry}
 {$ifndef FullDebugMode}
-      Result[LInd].LeakAddress := AEntry.LeakAddress;
+      Result[LInd].LeakAddress := AEntry^.LeakAddress;
 {$else}
       Result[LInd].LeakAddress := Pointer(PByte(AEntry.LeakAddress) + SizeOf(TFullDebugBlockHeader));
 {$endif}
-      Result[LInd].LeakedClass := AEntry.LeakedClass;
+      Result[LInd].LeakedClass := AEntry^.LeakedClass;
 {$ifdef CheckCppObjectTypeEnabled}
       Result[LInd].LeakedCppTypeIdPtr := AEntry.LeakedCppTypeIdPtr;
 {$endif}
-      Result[LInd].LeakSize := AEntry.LeakSize;
-      Result[LInd].LeakCount := AEntry.LeakCount;
+      Result[LInd].LeakSize := AEntry^.LeakSize;
+      Result[LInd].LeakCount := AEntry^.LeakCount;
       {Next entry}
-      AEntry := AEntry.NextLeak;
+      AEntry := AEntry^.NextLeak;
     end;
   end;
 
@@ -15726,9 +16136,9 @@ begin
   if (ExpectedMemoryLeaks <> nil) and LockExpectedMemoryLeaksList then
   begin
     {Add all entries}
-    AddEntries(ExpectedMemoryLeaks.FirstEntryByAddress);
-    AddEntries(ExpectedMemoryLeaks.FirstEntryByClass);
-    AddEntries(ExpectedMemoryLeaks.FirstEntryBySizeOnly);
+    AddEntries(ExpectedMemoryLeaks^.FirstEntryByAddress);
+    AddEntries(ExpectedMemoryLeaks^.FirstEntryByClass);
+    AddEntries(ExpectedMemoryLeaks^.FirstEntryBySizeOnly);
     {Unlock the list}
     ReleaseLockByte(ExpectedMemoryLeaksListLocked);
   end;
@@ -15769,7 +16179,7 @@ var
   LPUniStr: PWideChar;
 begin
   {Check that the reference count is within a reasonable range}
-  if PStrRec(APMemoryBlock).refCnt > MaxRefCount then
+  if PStrRec(APMemoryBlock)^.refCnt > MaxRefCount then
   begin
     Result := stUnknown;
     Exit;
@@ -15791,7 +16201,7 @@ begin
   LElemSize := 1;
 {$endif}
   {Get the string length}
-  LStringLength := PStrRec(APMemoryBlock).length;
+  LStringLength := PStrRec(APMemoryBlock)^.length;
   {Does the string fit?}
   if (LStringLength <= 0)
     or (LStringLength >= (AAvailableSpaceInBlock - SizeOf(StrRec)) div LElemSize) then
@@ -15898,7 +16308,7 @@ begin
             {Step through all the blocks in the small block pool}
             LPSmallBlockPool := LPMediumBlock;
             {Get the useable size inside a block}
-            LBlockSize := LPSmallBlockPool.BlockType.BlockSize - BlockHeaderSize - TotalDebugOverhead;
+            LBlockSize := LPSmallBlockPool^.BlockType^.BlockSize - BlockHeaderSize - TotalDebugOverhead;
             {Get the first and last pointer for the pool}
             GetFirstAndLastSmallBlockInPool(LPSmallBlockPool, LCurPtr, LEndPtr);
             {Step through all blocks}
@@ -15910,7 +16320,7 @@ begin
                 ACallBack(PByte(LCurPtr) + DebugHeaderSize, LBlockSize, AUserData);
               end;
               {Next block}
-              Inc(PByte(LCurPtr), LPSmallBlockPool.BlockType.BlockSize);
+              Inc(PByte(LCurPtr), LPSmallBlockPool^.BlockType^.BlockSize);
             end;
           end
           else
@@ -15923,7 +16333,7 @@ begin
         LPMediumBlock := NextMediumBlock(LPMediumBlock);
       end;
       {Get the next medium block pool}
-      LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+      LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
     end;
   finally
     {Unlock medium blocks}
@@ -15956,10 +16366,10 @@ begin
     LPLargeBlock := LargeBlocksCircularList.NextLargeBlockHeader;
     while LPLargeBlock <> @LargeBlocksCircularList do
     begin
-      LBlockSize := (LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask) - BlockHeaderSize - LargeBlockHeaderSize - TotalDebugOverhead;
+      LBlockSize := (LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask) - BlockHeaderSize - LargeBlockHeaderSize - TotalDebugOverhead;
       ACallBack(PByte(LPLargeBlock) + LargeBlockHeaderSize + DebugHeaderSize, LBlockSize, AUserData);
       {Get the next large block}
-      LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+      LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
     end;
   finally
 {$ifndef AssumeMultiThreaded}
@@ -15984,7 +16394,7 @@ type
     {The left and right child nodes}
     LeftAndRightNodePointers: array[Boolean] of PMemoryLogNode;
     {The class this node belongs to}
-    ClassPtr: Pointer;
+    ClassPtr: TClass;
     {The number of instances of the class}
     InstanceCount: NativeInt;
     {The total memory usage for this class}
@@ -16021,14 +16431,14 @@ begin
   if (LClass > 65535)
     and ((LClass and 3) = 0) then
   begin
-    LPParentNode := @LPLogInfo.RootNode;
+    LPParentNode := @LPLogInfo^.RootNode;
     LClassHashBits := LClass;
     repeat
       LChildNodeDirection := Boolean(LClassHashBits and 1);
       {Split off the next bit of the class pointer and traverse in the appropriate direction.}
-      LPClassNode := LPParentNode.LeftAndRightNodePointers[LChildNodeDirection];
+      LPClassNode := LPParentNode^.LeftAndRightNodePointers[LChildNodeDirection];
       {Is this child node the node the class we're looking for?}
-      if (LPClassNode = nil) or (NativeUInt(LPClassNode.ClassPtr) = LClass) then
+      if (LPClassNode = nil) or (NativeUInt(LPClassNode^.ClassPtr) = LClass) then
         Break;
       {The node was not found: Keep on traversing the tree.}
       LClassHashBits := LClassHashBits shr 1;
@@ -16046,25 +16456,25 @@ begin
     if LClass = 0 then
       LClass := Ord(DetectStringData(APBlock, ABlockSize));
     {Is this class already in the tree?}
-    LPParentNode := @LPLogInfo.RootNode;
+    LPParentNode := @LPLogInfo^.RootNode;
     LClassHashBits := LClass;
     repeat
       LChildNodeDirection := Boolean(LClassHashBits and 1);
       {Split off the next bit of the class pointer and traverse in the appropriate direction.}
-      LPClassNode := LPParentNode.LeftAndRightNodePointers[LChildNodeDirection];
+      LPClassNode := LPParentNode^.LeftAndRightNodePointers[LChildNodeDirection];
       {Is this child node the node the class we're looking for?}
       if LPClassNode = nil then
       begin
         {The end of the tree was reached: Add a new child node.}
-        LPClassNode := @LPLogInfo.Nodes[LPLogInfo.NodeCount];
-        Inc(LPLogInfo.NodeCount);
-        LPParentNode.LeftAndRightNodePointers[LChildNodeDirection] := LPClassNode;
-        LPClassNode.ClassPtr := Pointer(LClass);
+        LPClassNode := @LPLogInfo^.Nodes[LPLogInfo^.NodeCount];
+        Inc(LPLogInfo^.NodeCount);
+        LPParentNode^.LeftAndRightNodePointers[LChildNodeDirection] := LPClassNode;
+        LPClassNode^.ClassPtr := TClass(LClass);
         Break;
       end
       else
       begin
-        if NativeUInt(LPClassNode.ClassPtr) = LClass then
+        if NativeUInt(LPClassNode^.ClassPtr) = LClass then
           Break;
       end;
       {The node was not found: Keep on traversing the tree.}
@@ -16073,8 +16483,8 @@ begin
     until False;
   end;
   {Update the statistics for the class}
-  Inc(LPClassNode.InstanceCount);
-  Inc(LPClassNode.TotalMemoryUsage, ABlockSize);
+  Inc(LPClassNode^.InstanceCount);
+  Inc(LPClassNode^.TotalMemoryUsage, ABlockSize);
 end;
 
 {This function is only needed to copy with an error given when using
@@ -16105,33 +16515,33 @@ begin
     {Order the left, middle and right items in ascending order}
     M := LRightIndex shr 1;
     {Is the middle item larger than the left item?}
-    if LPLeftItem[0].TotalMemoryUsage > LPLeftItem[M].TotalMemoryUsage then
+    if LPLeftItem^[0].TotalMemoryUsage > LPLeftItem^[M].TotalMemoryUsage then
     begin
       {Swap items 0 and M}
-      LTempItem := LPLeftItem[0];
-      LPLeftItem[0] := LPLeftItem[M];
-      LPLeftItem[M] := LTempItem;
+      LTempItem := LPLeftItem^[0];
+      LPLeftItem^[0] := LPLeftItem^[M];
+      LPLeftItem^[M] := LTempItem;
     end;
     {Is the middle item larger than the right?}
-    if LPLeftItem[M].TotalMemoryUsage > LPLeftItem[LRightIndex].TotalMemoryUsage then
+    if LPLeftItem^[M].TotalMemoryUsage > LPLeftItem^[LRightIndex].TotalMemoryUsage then
     begin
       {The right-hand item is not larger - swap it with the middle}
-      LTempItem := LPLeftItem[LRightIndex];
-      LPLeftItem[LRightIndex] := LPLeftItem[M];
-      LPLeftItem[M] := LTempItem;
+      LTempItem := LPLeftItem^[LRightIndex];
+      LPLeftItem^[LRightIndex] := LPLeftItem^[M];
+      LPLeftItem^[M] := LTempItem;
       {Is the left larger than the new middle?}
-      if LPLeftItem[0].TotalMemoryUsage > LPLeftItem[M].TotalMemoryUsage then
+      if LPLeftItem^[0].TotalMemoryUsage > LPLeftItem^[M].TotalMemoryUsage then
       begin
         {Swap items 0 and M}
-        LTempItem := LPLeftItem[0];
-        LPLeftItem[0] := LPLeftItem[M];
-        LPLeftItem[M] := LTempItem;
+        LTempItem := LPLeftItem^[0];
+        LPLeftItem^[0] := LPLeftItem^[M];
+        LPLeftItem^[M] := LTempItem;
       end;
     end;
     {Move the pivot item out of the way by swapping M with R - 1}
-    LPivot := LPLeftItem[M];
-    LPLeftItem[M] := LPLeftItem[LRightIndex - 1];
-    LPLeftItem[LRightIndex - 1] := LPivot;
+    LPivot := LPLeftItem^[M];
+    LPLeftItem^[M] := LPLeftItem^[LRightIndex - 1];
+    LPLeftItem^[LRightIndex - 1] := LPivot;
     {Set up the loop counters}
     I := 0;
     J := LRightIndex - 1;
@@ -16140,22 +16550,22 @@ begin
       {Find the first item from the left that is not smaller than the pivot}
       repeat
         Inc(I);
-      until LPLeftItem[I].TotalMemoryUsage >= LPivot.TotalMemoryUsage;
+      until LPLeftItem^[I].TotalMemoryUsage >= LPivot.TotalMemoryUsage;
       {Find the first item from the right that is not larger than the pivot}
       repeat
         Dec(J);
-      until LPLeftItem[J].TotalMemoryUsage <= LPivot.TotalMemoryUsage;
+      until LPLeftItem^[J].TotalMemoryUsage <= LPivot.TotalMemoryUsage;
       {Stop the loop when the two indexes cross}
       if J < I then
         Break;
       {Swap item I and J}
-      LTempItem := LPLeftItem[I];
-      LPLeftItem[I] := LPLeftItem[J];
-      LPLeftItem[J] := LTempItem;
+      LTempItem := LPLeftItem^[I];
+      LPLeftItem^[I] := LPLeftItem^[J];
+      LPLeftItem^[J] := LTempItem;
     end;
     {Put the pivot item back in the correct position by swapping I with R - 1}
-    LPLeftItem[LRightIndex - 1] := LPLeftItem[I];
-    LPLeftItem[I] := LPivot;
+    LPLeftItem^[LRightIndex - 1] := LPLeftItem^[I];
+    LPLeftItem^[I] := LPivot;
     {Sort the left-hand partition}
     if J >= (QuickSortMinimumItemsInPartition - 1) then
       QuickSortLogNodes(LPLeftItem, J);
@@ -16176,15 +16586,15 @@ var
 begin
   for I := 1 to ARightIndex do
   begin
-    LCurNode := APLeftItem[I];
+    LCurNode := APLeftItem^[I];
     {Scan backwards to find the best insertion spot}
     J := I;
-    while (J > 0) and (APLeftItem[J - 1].TotalMemoryUsage > LCurNode.TotalMemoryUsage) do
+    while (J > 0) and (APLeftItem^[J - 1].TotalMemoryUsage > LCurNode.TotalMemoryUsage) do
     begin
-      APLeftItem[J] := APLeftItem[J - 1];
+      APLeftItem^[J] := APLeftItem^[J - 1];
       Dec(J);
     end;
-    APLeftItem[J] := LCurNode;
+    APLeftItem^[J] := LCurNode;
   end;
 end;
 
@@ -16221,6 +16631,7 @@ var
                                 "typed @ operator", to simplify things and remove
                                 typecasts that pose potential dannger.}
   LInitialSize: Cardinal;
+  LCallback: TWalkAllocatedBlocksCallback;
 begin
   {Get the current memory manager usage summary.}
   GetMemoryManagerUsageSummary(LMemoryManagerUsageSummary);
@@ -16230,17 +16641,18 @@ begin
   begin
     try
       {Log all allocated blocks by class.}
-      WalkAllocatedBlocks({$ifdef fpc64bit}@{$endif}LogMemoryManagerStateCallBack, LPLogInfo);
+      LCallback := {$IFDEF FPC}@{$ENDIF}LogMemoryManagerStateCallBack;
+      WalkAllocatedBlocks(LCallback, LPLogInfo);
       {Sort the classes by total memory usage: Do the initial QuickSort pass over the list to sort the list in groups
        of QuickSortMinimumItemsInPartition size.}
-      if LPLogInfo.NodeCount >= QuickSortMinimumItemsInPartition then
+      if LPLogInfo^.NodeCount >= QuickSortMinimumItemsInPartition then
       begin
-        LMemLogNode := @(LPLogInfo.Nodes[0]);
-        QuickSortLogNodes(GetNodeListFromNode(LMemLogNode), LPLogInfo.NodeCount - 1);
+        LMemLogNode := @(LPLogInfo^.Nodes[0]);
+        QuickSortLogNodes(GetNodeListFromNode(LMemLogNode), LPLogInfo^.NodeCount - 1);
       end;
       {Do the final InsertionSort pass.}
-      LMemLogNode := @(LPLogInfo.Nodes[0]);
-      InsertionSortLogNodes(GetNodeListFromNode(LMemLogNode), LPLogInfo.NodeCount - 1);
+      LMemLogNode := @(LPLogInfo^.Nodes[0]);
+      InsertionSortLogNodes(GetNodeListFromNode(LMemLogNode), LPLogInfo^.NodeCount - 1);
       {Create the output file}
       {$ifdef POSIX}
       lFileHandle := FileCreate(AFilename);
@@ -16263,16 +16675,16 @@ begin
           LPMsg := NativeUIntToStrBuf(Round(LMemoryManagerUsageSummary.EfficiencyPercentage), LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
           LPMsg := AppendStringToBuffer(LogStateEfficiencyMsg, LPMsg, Length(LogStateEfficiencyMsg), LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
           {Log the allocation detail}
-          for LInd := LPLogInfo.NodeCount - 1 downto 0 do
+          for LInd := LPLogInfo^.NodeCount - 1 downto 0 do
           begin
-            LPNode := @LPLogInfo.Nodes[LInd];
+            LPNode := @(LPLogInfo^.Nodes[LInd]);
             {Add the allocated size}
             LPMsg^ := ' ';
             Inc(LPMsg);
-            LPMsg := NativeUIntToStrBuf(LPNode.TotalMemoryUsage, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
+            LPMsg := NativeUIntToStrBuf(LPNode^.TotalMemoryUsage, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
             LPMsg := AppendStringToBuffer(BytesMessage, LPMsg, Length(BytesMessage), LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
             {Add the class type}
-            case NativeUInt(LPNode.ClassPtr) of
+            case NativeUInt(LPNode^.ClassPtr) of
               {Unknown}
               0:
               begin
@@ -16291,7 +16703,7 @@ begin
               {Classes}
             else
               begin
-                LPMsg := AppendClassNameToBuffer(LPNode.ClassPtr, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
+                LPMsg := AppendClassNameToBuffer(LPNode^.ClassPtr, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
               end;
             end;
             {Add the count}
@@ -16301,9 +16713,9 @@ begin
             Inc(LPMsg);
             LPMsg^ := ' ';
             Inc(LPMsg);
-            LPMsg := NativeUIntToStrBuf(LPNode.InstanceCount, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
+            LPMsg := NativeUIntToStrBuf(LPNode^.InstanceCount, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
             LPMsg := AppendStringToBuffer(AverageSizeLeadText, LPMsg, Length(AverageSizeLeadText), LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
-            LPMsg := NativeUIntToStrBuf(LPNode.TotalMemoryUsage div LPNode.InstanceCount, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
+            LPMsg := NativeUIntToStrBuf(LPNode^.TotalMemoryUsage div LPNode^.InstanceCount, LPMsg, LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
             LPMsg := AppendStringToBuffer(AverageSizeTrailingText, LPMsg, Length(AverageSizeTrailingText), LInitialSize-NativeUInt(LPMsg-LPInitialMsgPtr));
             {Flush the buffer?}
             LUMsg := NativeUInt(LPMsg);
@@ -16435,7 +16847,7 @@ var
       {$endif}
       LLeak.LeakSize := 0;
       LLeak.LeakCount := -1;
-      if UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryByAddress, @LLeak, False) then
+      if UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryByAddress, @LLeak, False) then
       begin
         Result := mltExpectedLeakRegisteredByPointer;
         Exit;
@@ -16460,14 +16872,14 @@ var
       LLeakedCppTypeIdPtr := LLeak.LeakedCppTypeIdPtr;
       {$endif}
       LLeak.LeakSize := ASpaceInsideBlock;
-      if UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryByClass, @LLeak, False) then
+      if UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryByClass, @LLeak, False) then
       begin
         Result := mltExpectedLeakRegisteredByClass;
         Exit;
       end;
       {Check by size: the block must be large enough to hold the leak}
       LLeak.LeakedClass := nil;
-      if UpdateExpectedLeakList(@ExpectedMemoryLeaks.FirstEntryBySizeOnly, @LLeak, False) then
+      if UpdateExpectedLeakList(@ExpectedMemoryLeaks^.FirstEntryBySizeOnly, @LLeak, False) then
         Result := mltExpectedLeakRegisteredBySize;
     end;
   end;
@@ -16487,12 +16899,12 @@ var
     LSmallBlockSize: Cardinal;
   begin
     {Get the useable size inside a block}
-    LSmallBlockSize := APSmallBlockPool.BlockType.BlockSize - BlockHeaderSize;
+    LSmallBlockSize := APSmallBlockPool^.BlockType^.BlockSize - BlockHeaderSize;
   {$ifdef FullDebugMode}
     Dec(LSmallBlockSize, FullDebugBlockOverhead);
   {$endif}
     {Get the block type index}
-    LBlockTypeIndex := (UIntPtr(APSmallBlockPool.BlockType) - UIntPtr(@SmallBlockTypes[0]))
+    LBlockTypeIndex := (UIntPtr(APSmallBlockPool^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
 {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
       shr SmallBlockTypeRecSizePowerOf2
 {$else}
@@ -16573,7 +16985,7 @@ var
               begin
               {$endif}
                 {Not a known class: Is it perhaps string data?}
-                case DetectStringData(LDataPtr, APSmallBlockPool.BlockType.BlockSize - (BlockHeaderSize {$ifdef FullDebugMode} + FullDebugBlockOverhead{$endif})) of
+                case DetectStringData(LDataPtr, APSmallBlockPool^.BlockType^.BlockSize - (BlockHeaderSize {$ifdef FullDebugMode} + FullDebugBlockOverhead{$endif})) of
                   stAnsiString: LClassIndex := 1;
                   stUnicodeString: LClassIndex := 2;
                 end;
@@ -16586,8 +16998,8 @@ var
               LClassIndex := 3;
               while LClassIndex <= High(TLeakedClasses) do
               begin
-                if (LPLeakedClasses[LClassIndex].ClassPointer = LLeakedClass)
-                  or ((LPLeakedClasses[LClassIndex].ClassPointer = nil)
+                if (LPLeakedClasses^[LClassIndex].ClassPointer = LLeakedClass)
+                  or ((LPLeakedClasses^[LClassIndex].ClassPointer = nil)
                   {$ifdef CheckCppObjectTypeEnabled}
                   and (LPLeakedClasses[LClassIndex].CppTypeIdPtr = nil)
                   {$endif}
@@ -16598,12 +17010,12 @@ var
                 Inc(LClassIndex);
               end;
               if LClassIndex <= High(TLeakedClasses) then
-                LPLeakedClasses[LClassIndex].ClassPointer := LLeakedClass
+                LPLeakedClasses^[LClassIndex].ClassPointer := LLeakedClass
               else
                 LClassIndex := 0;
             end;
             {Add to the number of leaks for the class}
-            Inc(LPLeakedClasses[LClassIndex].NumLeaks);
+            Inc(LPLeakedClasses^[LClassIndex].NumLeaks);
           end;
         end;
       end
@@ -16615,7 +17027,7 @@ var
   {$endif}
       end;
       {Next block}
-      Inc(PByte(LCurPtr), APSmallBlockPool.BlockType.BlockSize);
+      Inc(PByte(LCurPtr), APSmallBlockPool^.BlockType^.BlockSize);
     end;
   end;
 {$endif}
@@ -16695,7 +17107,7 @@ begin
       LPMediumBlock := NextMediumBlock(LPMediumBlock);
     end;
     {Get the next medium block pool}
-    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
   end;
 {$ifdef EnableMemoryLeakReporting}
   if ACheckForLeakedBlocks then
@@ -16710,7 +17122,7 @@ begin
   {$endif}
       then
       begin
-        LLargeBlockSize := (LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask) - BlockHeaderSize - LargeBlockHeaderSize;
+        LLargeBlockSize := (LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask) - BlockHeaderSize - LargeBlockHeaderSize;
   {$ifdef FullDebugMode}
         Dec(LLargeBlockSize, FullDebugBlockOverhead);
   {$endif}
@@ -16734,7 +17146,7 @@ begin
         end;
       end;
       {Get the next large block}
-      LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+      LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
     end;
     {Display the leak message if required}
     if not LExpectedLeaksOnly then
@@ -16986,7 +17398,7 @@ begin
         if (LMediumBlockHeader and IsSmallBlockPoolInUseFlag) <> 0 then
         begin
           {Get the block type index}
-          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock).BlockType) - UIntPtr(@SmallBlockTypes[0]))
+          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
     {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
           shr SmallBlockTypeRecSizePowerOf2
     {$else}
@@ -16999,7 +17411,7 @@ begin
           Inc(AMemoryManagerState.SmallBlockTypeStates[LBlockTypeIndex].ReservedAddressSpace, LMediumBlockSize);
           {Add the usage for the pool}
           Inc(AMemoryManagerState.SmallBlockTypeStates[LBlockTypeIndex].AllocatedBlockCount,
-            PSmallBlockPoolHeader(LPMediumBlock).BlocksInUse);
+            PSmallBlockPoolHeader(LPMediumBlock)^.BlocksInUse);
         end
         else
         begin
@@ -17014,7 +17426,7 @@ begin
       LPMediumBlock := NextMediumBlock(LPMediumBlock);
     end;
     {Get the next medium block pool}
-    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
   end;
   {Unlock medium blocks}
 {$ifndef AssumeMultiThreaded}
@@ -17043,12 +17455,12 @@ begin
   LPLargeBlock := LargeBlocksCircularList.NextLargeBlockHeader;
   while LPLargeBlock <> @LargeBlocksCircularList do
   begin
-    LLargeBlockSize := LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
+    LLargeBlockSize := LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     Inc(AMemoryManagerState.AllocatedLargeBlockCount);
     Inc(AMemoryManagerState.ReservedLargeBlockAddressSpace, LLargeBlockSize);
-    Inc(AMemoryManagerState.TotalAllocatedLargeBlockSize, LPLargeBlock.UserAllocatedSize);
+    Inc(AMemoryManagerState.TotalAllocatedLargeBlockSize, LPLargeBlock^.UserAllocatedSize);
     {Get the next large block}
-    LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+    LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
   end;
 {$ifndef AssumeMultiThreaded}
   if LLargeBlocksLocked then
@@ -17141,7 +17553,7 @@ begin
       AMemoryMap[LChunkIndex + LIndNUI] := csAllocated;
     end;
     {Get the next medium block pool}
-    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
   end;
 {$ifndef AssumeMultiThreaded}
   if LMediumBlocksLocked then
@@ -17165,7 +17577,7 @@ begin
   while LPLargeBlock <> @LargeBlocksCircularList do
   begin
     LChunkIndex := UIntPtr(LPLargeBlock) shr 16;
-    LLargeBlockSize := LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
+    LLargeBlockSize := LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     for LIndNUI := 0 to (LLargeBlockSize - 1) shr 16 do
     begin
       if (LChunkIndex + LIndNUI) > High(AMemoryMap) then
@@ -17173,7 +17585,7 @@ begin
       AMemoryMap[LChunkIndex + LIndNUI] := csAllocated;
     end;
     {Get the next large block}
-    LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+    LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
   end;
 {$ifndef AssumeMultiThreaded}
   if LLargeBlocksLocked then
@@ -17304,7 +17716,7 @@ begin
         if (LMediumBlockHeader and IsSmallBlockPoolInUseFlag) <> 0 then
         begin
           {Get the block type index}
-          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock).BlockType) - UIntPtr(@SmallBlockTypes[0]))
+          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
     {$ifdef SmallBlockTypeRecSizeIsPowerOf2}
           shr SmallBlockTypeRecSizePowerOf2
     {$else}
@@ -17312,10 +17724,10 @@ begin
     {$endif}
           ;
           {Get the usage in the block}
-          LSmallBlockUsage := PSmallBlockPoolHeader(LPMediumBlock).BlocksInUse
+          LSmallBlockUsage := PSmallBlockPoolHeader(LPMediumBlock)^.BlocksInUse
             * SmallBlockTypes[LBlockTypeIndex].BlockSize;
           {Get the total overhead for all the small blocks}
-          LSmallBlockOverhead := PSmallBlockPoolHeader(LPMediumBlock).BlocksInUse
+          LSmallBlockOverhead := PSmallBlockPoolHeader(LPMediumBlock)^.BlocksInUse
               * (BlockHeaderSize{$ifdef FullDebugMode} + FullDebugBlockOverhead{$endif});
           {Add to the totals}
           Inc(Result.FreeSmall, LMediumBlockSize - LSmallBlockUsage - BlockHeaderSize);
@@ -17342,7 +17754,7 @@ begin
       LPMediumBlock := NextMediumBlock(LPMediumBlock);
     end;
     {Get the next medium block pool}
-    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+    LPMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
   end;
   {Add the sequential feed unused space}
   Inc(Result.Unused, MediumSequentialFeedBytesLeft);
@@ -17373,15 +17785,15 @@ begin
   LPLargeBlock := LargeBlocksCircularList.NextLargeBlockHeader;
   while LPLargeBlock <> @LargeBlocksCircularList do
   begin
-    LLargeBlockSize := LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
+    LLargeBlockSize := LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask;
     Inc(Result.TotalAddrSpace, LLargeBlockSize);
     Inc(Result.TotalCommitted, LLargeBlockSize);
-    Inc(Result.TotalAllocated, LPLargeBlock.UserAllocatedSize
+    Inc(Result.TotalAllocated, LPLargeBlock^.UserAllocatedSize
       {$ifdef FullDebugMode} - FullDebugBlockOverhead{$endif});
-    Inc(Result.Overhead, LLargeBlockSize - LPLargeBlock.UserAllocatedSize
+    Inc(Result.Overhead, LLargeBlockSize - LPLargeBlock^.UserAllocatedSize
       {$ifdef FullDebugMode} + FullDebugBlockOverhead{$endif});
     {Get the next large block}
-    LPLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+    LPLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
   end;
 {$ifndef AssumeMultiThreaded}
   if LLargeBlocksLocked then
@@ -17426,7 +17838,7 @@ begin
   while LPMediumBlockPoolHeader <> @MediumBlockPoolsCircularList do
   begin
     {Get the next medium block pool so long}
-    LPNextMediumBlockPoolHeader := LPMediumBlockPoolHeader.NextMediumBlockPoolHeader;
+    LPNextMediumBlockPoolHeader := LPMediumBlockPoolHeader^.NextMediumBlockPoolHeader;
 {$ifdef ClearMediumBlockPoolsBeforeReturningToOS}
     FillChar(LPMediumBlockPoolHeader^, MediumBlockPoolSize, 0);
 {$else}
@@ -17455,9 +17867,9 @@ begin
   {All medium bins are empty}
   for LInd := Low(MediumBlockBins) to High(MediumBlockBins) do
   begin
-    LPMediumFreeBlock := @MediumBlockBins[LInd];
-    LPMediumFreeBlock.PreviousFreeBlock := LPMediumFreeBlock;
-    LPMediumFreeBlock.NextFreeBlock := LPMediumFreeBlock;
+    LPMediumFreeBlock := @(MediumBlockBins[LInd]);
+    LPMediumFreeBlock^.PreviousFreeBlock := LPMediumFreeBlock;
+    LPMediumFreeBlock^.NextFreeBlock := LPMediumFreeBlock;
   end;
   MediumBlockBinGroupBitmap := 0;
   FillChar(MediumBlockBinBitmaps, SizeOf(MediumBlockBinBitmaps), 0);
@@ -17467,10 +17879,10 @@ begin
   while LPLargeBlock <> @LargeBlocksCircularList do
   begin
     {Get the next large block}
-    LPNextLargeBlock := LPLargeBlock.NextLargeBlockHeader;
+    LPNextLargeBlock := LPLargeBlock^.NextLargeBlockHeader;
 {$ifdef ClearLargeBlocksBeforeReturningToOS}
     FillChar(LPLargeBlock^,
-      LPLargeBlock.BlockSizeAndFlags and DropMediumAndLargeFlagsMask, 0);
+      LPLargeBlock^.BlockSizeAndFlags and DropMediumAndLargeFlagsMask, 0);
 {$endif}
     {Free this large block}
     VirtualFree(LPLargeBlock, 0, MEM_RELEASE);
@@ -17979,6 +18391,85 @@ units). }
   Result := True;
 end;
 
+procedure InitializeInvalidMemoryManager;
+begin
+{$ifdef DetectMMOperationsAfterUninstall}
+  with InvalidMemoryManager do
+  begin
+    GetMem :=  {$IFDEF FPC}@{$ENDIF}InvalidGetMem;
+    FreeMem := {$IFDEF FPC}@{$ENDIF}InvalidFreeMem;
+    ReallocMem := {$IFDEF FPC}@{$ENDIF}InvalidReallocMem;
+  {$ifdef BDS2006AndUp}
+    AllocMem := {$IFDEF FPC}@{$ENDIF}InvalidAllocMem;
+    RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}InvalidRegisterAndUnRegisterMemoryLeak;
+    UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}InvalidRegisterAndUnRegisterMemoryLeak;
+  {$endif}
+  end;
+{$endif}
+end;
+
+
+procedure InitializeBlockTypes;
+var
+  i, Size, Increment, LastCount, FirstJump: Cardinal;
+begin
+  LastCount := 0;
+  Size := Cardinal(UnsignedBit) shl SmallBlockGranularityPowerOf2;
+  FirstJump := 160;
+  {$ifdef 64bit}
+  if Size < 16 then
+  begin
+    Size := 16;
+    FirstJump := 176;
+  end;
+  {$endif}
+  Increment := Cardinal(UnsignedBit) shl SmallBlockGranularityPowerOf2;
+  for i := 0 to NumSmallBlockTypes-1 do
+  begin
+    SmallBlockTypes[i].BlockSize := Size;
+    if (Size >= FirstJump) and (Increment < 16) then Increment := 16 else
+    if (Size >= 320) and (Increment < 32) then Increment := 32 else
+{$ifndef Align32Bytes}
+    if (Size >= 480) and (Increment < 48) then Increment := 48 else
+{$endif}
+    if (Size >= 672) and (Increment < 64) then Increment := 64 else
+{$ifndef Align32Bytes}
+    if (Size >= 800) and (Increment < 80) then Increment := 80 else
+{$endif}
+    if (Size >= 1056) and (Increment < 96) then Increment := 96 else
+{$ifndef Align32Bytes}
+    if (Size >= 1152) and (Increment < 112) then Increment := 112 else
+{$endif}
+    if (Size >= 1376) and (Increment < 128) then Increment := 128 else
+    if (Size >= 1648) and (Increment < 160) then Increment := 160 else
+    if (Size >= 1984) and (Increment < 192) then Increment := 192 else
+    if (Size >= 2384) and (Increment < 224) then Increment := 224;
+    Inc(Size, Increment);
+    if (Size = 1056) or (Size = 1040) then Size := 1024 else
+    if (Size = 2080) or (Size = 2000) then Size := 2048;
+    if Size >= MaximumSmallBlockSize then
+    begin
+      Size := MaximumSmallBlockSize;
+      Inc(LastCount);
+    end;
+  end;
+  if LastCount <> 3 then
+  begin
+   {The last block size occurs three times. If, during a GetMem call, the
+    requested block size is already locked by another thread then up to two
+    larger block sizes may be used instead. Having the last block size occur
+    three times avoids the need to have a size overflow check.}
+
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
+
+  end;
+end;
+
+
 {Initializes the lookup tables for the memory manager}
 procedure InitializeMemoryManager;
 {$ifdef FullDebugMode}
@@ -18038,11 +18529,17 @@ var
 {$ifdef UseReleaseStack}
   LSlot: Integer;
 {$endif}
+  LByte: Byte;
 begin
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
-  FSwitchToThread := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+  {$IFDEF FPC}
+  Pointer(FSwitchToThread)
+  {$ELSE}
+  FSwitchToThread
+  {$ENDIF}
+  := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
 {$endif}
 {$endif}
 
@@ -18187,7 +18684,7 @@ This is because the operating system would not save the registers and the states
       end;
 {$endif}
 
-{ Here is the Intel algorithm to detext AVX
+{ Here is the Intel algorithm to detext AVX }
 { QUOTE from the Intel 64 and IA-32 Architectures Optimization Reference Manual
 1) Detect CPUID.1:ECX.OSXSAVE[bit 27] = 1 (XGETBV enabled for application use1)
 2) Issue XGETBV and verify that XCR0[2:1] = '11b' (XMM state and YMM state are enabled by OS).
@@ -18282,11 +18779,26 @@ ENDQUOTE}
   end;
   {$endif}
 
+  InitializeInvalidMemoryManager;
+
+  InitializeBlockTypes;
+
   LPreviousBlockSize := 0;
 
   for LInd := 0 to High(SmallBlockTypes) do
   begin
     SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteAvailable;
+
+
+
+{$ifdef UseCustomFixedSizeMoveRoutines}
+
+    {Set the move procedure}
+
+    {The upsize move procedure may move chunks in 16 bytes even with 8-byte
+    alignment, since the new size will always be at least 8 bytes bigger than
+    the old size.}
+
 
     {$ifdef 32bit}
     {$ifndef unix}
@@ -18296,21 +18808,56 @@ ENDQUOTE}
     if ((FastMMCpuFeatures and FastMMCpuFeatureSSE) <> 0) then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move20_32bit_SSE;
-        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move28_32bit_SSE;
-        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move36_32bit_SSE;
-        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move44_32bit_SSE;
-        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move52_32bit_SSE;
-        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move60_32bit_SSE;
-        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move68_32bit_SSE;
-        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move76_32bit_SSE;
-        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move84_32bit_SSE;
-        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move92_32bit_SSE;
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move20_32bit_SSE;
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move28_32bit_SSE;
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move36_32bit_SSE;
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move44_32bit_SSE;
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move52_32bit_SSE;
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move60_32bit_SSE;
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move68_32bit_SSE;
+        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move76_32bit_SSE;
+        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move84_32bit_SSE;
+        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move92_32bit_SSE;
       end;
     end;
     {$endif}
     {$endif}
     {$endif}
+
+    if not Assigned(SmallBlockTypes[LInd].UpsizeMoveProcedure) then
+    begin
+      case SmallBlockTypes[LInd].BlockSize of
+        {$ifdef 32bit}
+        8: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move4;
+        {$endif}
+        {$ifndef Align32Bytes}
+        16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move12{$else}Move8{$endif};
+        {$ifndef Align16Bytes}
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move20{$else}Move16{$endif};
+        {$endif Align16Bytes}
+        {$endif Align32Bytes}
+
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move28{$else}Move24{$endif};
+
+        {$ifndef Align32Bytes}
+        {$ifndef Align16Bytes}
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move36{$else}Move32{$endif};
+        {$endif}
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move44{$else}Move40{$endif};
+        {$ifndef Align16Bytes}
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move52{$else}Move48{$endif};
+        {$endif}
+        {$endif}
+
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move60{$else}Move56{$endif};
+
+        {$ifndef Align32Bytes}
+        {$ifndef Align16Bytes}
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move68{$else}Move64{$endif};
+        {$endif}
+        {$endif}
+      end;
+    end;
 
     {$ifdef 64bit}
     {$ifdef EnableFSRM}
@@ -18320,8 +18867,23 @@ ENDQUOTE}
       // don't use any register copy if we have Fast Short REP MOVSB
       // Fast Short REP MOVSB is very fast under 64-bit
       case SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24Reg64;
-         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56Reg64;
+         {$ifndef Align32Bytes}
+         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move8;
+         {$ifndef Align16Bytes}
+         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move16;
+         {$endif Align16Bytes}
+         {$endif Align32Bytes}
+         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24Reg64;
+         {$ifndef Align32Bytes}
+         {$ifndef Align16Bytes}
+         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move32Reg64;
+         {$endif}
+         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move40Reg64;
+         {$ifndef Align16Bytes}
+         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move48Reg64;
+         {$endif}
+         {$endif}
+         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56Reg64;
          else  SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
       end;
     end;
@@ -18329,12 +18891,6 @@ ENDQUOTE}
     {$endif}
     {$endif}
 
-
-    {Set the move procedure}
-{$ifdef UseCustomFixedSizeMoveRoutines}
-    {The upsize move procedure may move chunks in 16 bytes even with 8-byte
-    alignment, since the new size will always be at least 8 bytes bigger than
-    the old size.}
 
 {$ifdef 64Bit}
 {$ifdef EnableAVX}
@@ -18450,13 +19006,13 @@ ENDQUOTE}
          {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
       end
       else
       {$endif EnableERMS}
       {$endif USE_CPUID}
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX16LP
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP
       end;
       ;
     {$endif Align32Bytes}
@@ -18475,7 +19031,7 @@ ENDQUOTE}
     SmallBlockTypes[LInd].PreviousPartiallyFreePool := LPSmallBlockPoolHeader;
     SmallBlockTypes[LInd].NextPartiallyFreePool := LPSmallBlockPoolHeader;
     {Set the block size to block type index translation table}
-    for LSizeInd := (LPreviousBlockSize div SmallBlockGranularity) to (NativeUInt(SmallBlockTypes[LInd].BlockSize - 1) div SmallBlockGranularity) do
+    for LSizeInd := (LPreviousBlockSize div SmallBlockGranularity) to (NativeUInt(SmallBlockTypes[LInd].BlockSize - 1) shr SmallBlockGranularityPowerOf2) do
     begin
    {$ifdef AllocSize2SmallBlockTypesPrecomputedOffsets}
       AllocSz2SmlBlkTypOfsDivSclFctr[LSizeInd] := LInd shl (SmallBlockTypeRecSizePowerOf2 - MaximumCpuScaleFactorPowerOf2);
@@ -18506,7 +19062,8 @@ ENDQUOTE}
     end;
 
     {Set the bitmap}
-    SmallBlockTypes[LInd].AllowedGroupsForBlockPoolBitmap := NegByteMaskBit(UnsignedBit shl LGroupNumber);
+    LByte := Byte(UnsignedBit) shl LGroupNumber;
+    SmallBlockTypes[LInd].AllowedGroupsForBlockPoolBitmap := NegByteMaskBit(LByte);
     {Set the minimum pool size}
     SmallBlockTypes[LInd].MinimumBlockPoolSize := MinimumMediumBlockSize + (LGroupNumber shl (MediumBlockGranularityPowerOf2 + MediumBlockBinsPerGroupPowerOf2));
     {Get the optimal block pool size}
@@ -18535,7 +19092,7 @@ ENDQUOTE}
 {$ifdef CheckHeapForCorruption}
     {Debug checks}
     if (SmallBlockTypes[LInd].OptimalBlockPoolSize < MinimumMediumBlockSize)
-      or (SmallBlockTypes[LInd].BlockSize div SmallBlockGranularity * SmallBlockGranularity <> SmallBlockTypes[LInd].BlockSize) then
+      or ((SmallBlockTypes[LInd].BlockSize shr SmallBlockGranularityPowerOf2) shl SmallBlockGranularityPowerOf2 <> SmallBlockTypes[LInd].BlockSize) then
     begin
   {$ifdef BCB6OrDelphi7AndUp}
       System.Error(reInvalidPtr);
@@ -18574,9 +19131,9 @@ ENDQUOTE}
   {All medium bins are empty}
   for LInd := 0 to High(MediumBlockBins) do
   begin
-    LPMediumFreeBlock := @MediumBlockBins[LInd];
-    LPMediumFreeBlock.PreviousFreeBlock := LPMediumFreeBlock;
-    LPMediumFreeBlock.NextFreeBlock := LPMediumFreeBlock;
+    LPMediumFreeBlock := @(MediumBlockBins[LInd]);
+    LPMediumFreeBlock^.PreviousFreeBlock := LPMediumFreeBlock;
+    LPMediumFreeBlock^.NextFreeBlock := LPMediumFreeBlock;
   end;
   {------------------Set up the large blocks---------------------}
   LargeBlocksLocked := CLockByteAvailable;
@@ -18708,34 +19265,34 @@ begin
 {$endif}
       {We will be using this memory manager}
 {$ifndef FullDebugMode}
-      NewMemoryManager.GetMem := {$ifdef fpc64bit}@{$endif}FastGetMem;
-      NewMemoryManager.FreeMem := {$ifdef fpc64bit}@{$endif}FastFreeMem;
-      NewMemoryManager.ReallocMem := {$ifdef fpc64bit}@{$endif}FastReallocMem;
+      NewMemoryManager.GetMem := {$IFDEF FPC}@{$ENDIF}FastGetMem;
+      NewMemoryManager.FreeMem := {$IFDEF FPC}@{$ENDIF}FastFreeMem;
+      NewMemoryManager.ReallocMem := {$IFDEF FPC}@{$ENDIF}FastReallocMem;
       {$ifdef fpc}
-      NewMemoryManager.FreememSize := {$ifdef fpc64bit}@{$endif}FastFreeMemSize;
-      NewMemoryManager.AllocMem := {$ifdef fpc64bit}@{$endif}FastAllocMem;
-      NewMemoryManager.MemSize := {$ifdef fpc64bit}@{$endif}FastMemSize;
+      NewMemoryManager.FreememSize := {$IFDEF FPC}@{$ENDIF}FastFreeMemSize;
+      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}FastAllocMem;
+      NewMemoryManager.MemSize := {$IFDEF FPC}@{$ENDIF}FastMemSize;
       {$endif}
 {$else}
-      NewMemoryManager.GetMem := DebugGetMem;
-      NewMemoryManager.FreeMem := DebugFreeMem;
-      NewMemoryManager.ReallocMem := DebugReallocMem;
+      NewMemoryManager.GetMem := {$IFDEF FPC}@{$ENDIF}DebugGetMem;
+      NewMemoryManager.FreeMem := {$IFDEF FPC}@{$ENDIF}DebugFreeMem;
+      NewMemoryManager.ReallocMem := {$IFDEF FPC}@{$ENDIF}DebugReallocMem;
 {$endif}
 {$ifdef fpc}
-      NewMemoryManager.GetFPCHeapStatus := {$ifdef fpc64bit}@{$endif}FastGetFPCHeapStatus; //support get TFPCHeapStatus
+      NewMemoryManager.GetFPCHeapStatus := {$IFDEF FPC}@{$ENDIF}FastGetFPCHeapStatus; //support get TFPCHeapStatus
 {$endif}
 {$ifdef BDS2006AndUp}
   {$ifndef FullDebugMode}
-      NewMemoryManager.AllocMem := FastAllocMem;
+      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}FastAllocMem;
   {$else}
-      NewMemoryManager.AllocMem := DebugAllocMem;
+      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}DebugAllocMem;
   {$endif}
   {$ifdef EnableMemoryLeakReporting}
-      NewMemoryManager.RegisterExpectedMemoryLeak := RegisterExpectedMemoryLeak;
-      NewMemoryManager.UnRegisterExpectedMemoryLeak := UnRegisterExpectedMemoryLeak;
+      NewMemoryManager.RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}RegisterExpectedMemoryLeak;
+      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}UnRegisterExpectedMemoryLeak;
   {$else}
-      NewMemoryManager.RegisterExpectedMemoryLeak := NoOpRegisterExpectedMemoryLeak;
-      NewMemoryManager.UnRegisterExpectedMemoryLeak := NoOpUnRegisterExpectedMemoryLeak;
+      NewMemoryManager.RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}NoOpRegisterExpectedMemoryLeak;
+      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}NoOpUnRegisterExpectedMemoryLeak;
   {$endif}
 {$endif}
       {Owns the memory manager}
@@ -18968,7 +19525,7 @@ begin
 end;
 {$endif}
 
-{$ifdef 64bit}
+{$ifdef AllowFreeBlockLater}
 procedure FreeSaved;
 var
   LInd: Integer;
@@ -19002,7 +19559,7 @@ begin
   DestroyCleanupThread;
   CleanupReleaseStacks;
 {$endif}
-{$ifdef 64bit}
+{$ifdef AllowFreeBlockLater}
   FreeSaved;
 {$endif}
 {$ifndef NeverUninstall}
@@ -19107,13 +19664,18 @@ procedure SelfTest;
 begin
 {$ifdef NeedFindFirstSetBit}
   if
+    (FindFirstSetBit(0) <> 0) or
     (FindFirstSetBit(1) <> 0) or
     (FindFirstSetBit(2) <> 1) or
     (FindFirstSetBit(3) <> 0) or
     (FindFirstSetBit(4) <> 2) or
     (FindFirstSetBit($80000000) <> 31) then
   begin
-    ShowMessageBox('Error', 'FindFirstSetBit self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
 {$endif}
   if (NegByteMaskBit(0) <> 0) or
@@ -19128,7 +19690,11 @@ begin
      (NegByteMaskBit($FE) <> 2) or
      (NegByteMaskBit($FF) <> 1) then
   begin
-    ShowMessageBox('Error', 'NegByteMaskBit self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
 
   if (NegCardinalMaskBit(0) <> 0) or
@@ -19145,7 +19711,11 @@ begin
      (NegCardinalMaskBit($100) <> $FFFFFF00) or
      (NegCardinalMaskBit($101) <> $FFFFFEFF) then
   begin
-    ShowMessageBox('Error', 'NegCardinalMaskBit (lower value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
 
   if
@@ -19155,7 +19725,11 @@ begin
      (NegCardinalMaskBit($FFFFFFFF) <> 1) or
      (NegCardinalMaskBit($FFFFFFFE) <> 2) then
   begin
-    ShowMessageBox('Error', 'NegCardinalMaskBit (higher value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
 
   {$ifdef 32bit}
@@ -19173,7 +19747,11 @@ begin
      (NegNativeUintMaskBit($100) <> $FFFFFF00) or
      (NegNativeUintMaskBit($101) <> $FFFFFEFF) then
   begin
-    ShowMessageBox('Error', 'NegNativeUintMaskBit (lower value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
   if
      (NegNativeUintMaskBit($7FFFFFFF) <> $80000001) or
@@ -19182,7 +19760,11 @@ begin
      (NegNativeUintMaskBit($FFFFFFFF) <> 1) or
      (NegNativeUintMaskBit($FFFFFFFE) <> 2) then
   begin
-    ShowMessageBox('Error', 'NegNativeUintMaskBit (higher value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
   {$else 32bit}
   if (NegNativeUintMaskBit(0) <> 0) or
@@ -19199,7 +19781,11 @@ begin
      (NegNativeUintMaskBit($100) <> $FFFFFFFFFFFFFF00) or
      (NegNativeUintMaskBit($101) <> $FFFFFFFFFFFFFEFF) then
   begin
-    ShowMessageBox('Error', 'NegNativeUintMaskBit (lower value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
   if
      (NegNativeUintMaskBit($7FFFFFFF) <> $FFFFFFFF80000001) or
@@ -19210,7 +19796,11 @@ begin
      (NegNativeUintMaskBit($FFFFFFFFFFFFFFFF) <> 1) or
      (NegNativeUintMaskBit($FFFFFFFFFFFFFFFE) <> 2) then
   begin
-      ShowMessageBox('Error', 'NegNativeUintMaskBit (higher value) self-test failed');
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
   end;
   {$endif 32bit}
 end;
@@ -19249,10 +19839,8 @@ begin
   end;
 {$endif}
 end;
-
 initialization
-   RunInitializationCode;
-
+  RunInitializationCode;
 finalization
 {$ifndef PatchBCBTerminate}
   FinalizeMemoryManager;

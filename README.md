@@ -6,7 +6,7 @@ FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support fo
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.05
+Version 1.06
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -73,7 +73,10 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
    - if EnableAVX is defined, all memory blocks are aligned by 32 bytes, but
      you can also use Align32Bytes define without AVX; please note that the memory
      overhead is higher when the blocks are aligned by 32 bytes, because some
-     memory is lost by padding;
+     memory is lost by padding; however, if your CPU supports
+     "Fast Short REP MOVSB" (Ice Lake or newer), you can disable AVX, and align
+     by just 8 bytes, and this may even be faster because less memory is wasted
+     on alignment;
    - with AVX, memory copy is secure - all XMM/YMM/ZMM registers used to copy
      memory are cleared by vxorps/vpxor, so the leftovers of the copied memory
      are not exposed in the XMM/YMM/ZMM registers;
@@ -258,6 +261,21 @@ If not, see <http://www.gnu.org/licenses/>.
 
 
 FastMM4-AVX Version History:
+
+- 1.06 (24 May 2021) - it can now be compiled with any alignment (8, 16, 32)
+    regardless of the target (x86, x64) and whether inline assembly is used
+    or not; the "PurePascal" conditional define to disable inline assembly at
+    all, however, in this case, efficient locking would not work since it
+    uses inline assembly; FreePascal now uses the original FreePascal compiler
+    mode, rather than the Delphi compatibility mode as before; resolved many
+    FreePascal compiler warnings; supported branch target alignment
+    in FreePascal inline assembly; small block types now always have
+    block sizes of 1024 and 2048 bytes, while in previous versions
+    instead of 1024-byte blocks there were 1056-byte blocks,
+    and instead of 2048-byte blocks were 2176-byte blocks;
+    fixed Delphi compiler hints for 64-bit Release mode; Win32 and Win64 
+    versions compiled under Delphi and FreePascal passed the all the FastCode 
+    validation suites.
 
 - 1.05 (20 May 2021) - improved speed of releasing memory blocks on higher thread
     contention. It is also possible to compile FastMM4-AVX without a single
