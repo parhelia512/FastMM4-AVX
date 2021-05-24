@@ -1240,6 +1240,9 @@ interface
   {$undef EnableAVX}
 {$endif}
 
+{$undef AsmVersion} // "AsmVersion" is not supported in version 1.06
+
+
 { The assembly implementation of FastGetmem and FastFreemem will check whether
  "pause" and SwitchToThread() are available, otherwisw will jump to pascal versions
  of FastGetmem and FastFreemem. However, if we assume that "pause" and SwitchToThread()
@@ -1575,32 +1578,8 @@ of just one option: "Boolean short-circuit evaluation".}
   {$endif}
 {$endif}
 
-{$ifdef AsmVersion}
-  {$ifdef EnableMMX}
-    {$ifndef ForceMMX}
-      {$define USE_CPUID}
-    {$endif}
-  {$endif}
-
-  {$ifdef EnableERMS}
-    {$define USE_CPUID}
-  {$endif}
-
-  {$ifdef EnableAVX}
-    {$define USE_CPUID}
-  {$endif}
-
-  {$ifdef SmallBlocksLockedCriticalSection}
-    {$define USE_CPUID}
-  {$endif}
-
-  {$ifdef MediumBlocksLockedCriticalSection}
-    {$define USE_CPUID}
-  {$endif}
-
-  {$ifdef LargeBlocksLockedCriticalSection}
-    {$define USE_CPUID}
-  {$endif}
+{$ifndef PurePascal}
+  {$define USE_CPUID}
 {$endif}
 
 {$ifndef DisablePauseAndSwitchToThread}
@@ -1616,11 +1595,11 @@ of just one option: "Boolean short-circuit evaluation".}
   {$define FastReallocMemNeedAssemberCode}
 {$endif}
 
-{$ifdef AsmVersion}
+{$ifndef PurePascal}
 {$define AuxAsmRoutines}
 {$endif}
 
-{$ifndef AsmVersion}
+{$ifdef PurePascal}
 {$undef USE_CPUID}
 {$undef EnableMMX}
 {$undef ForceMMX}
@@ -1670,14 +1649,6 @@ of just one option: "Boolean short-circuit evaluation".}
   {$ifdef PurePascal}
     {$define SynchroVarLongint}
   {$endif}
-{$endif}
-
-{$ifdef 64bit}
-  {$define AllowFreeBlockLater}
-{$endif}
-
-{$ifdef SynchroVarLongint}
-  {$undef AllowFreeBlockLater}
 {$endif}
 
 {$ifdef PurePascal}
@@ -2522,14 +2493,9 @@ type
     Reserved1: Pointer;
     {$endif}
 {$endif}
-{$ifdef AllowFreeBlockLater}
-    FreeBlockLater: Pointer; // if we cannot free a block due to a lock, we save it here and try again later
-{$else}
     {$ifdef 64bit}
     Reserved3: Pointer;
     {$endif}
-{$endif}
-
 {$ifdef UseReleaseStack}
     ReleaseStack: array [0..NumStacksPerBlock - 1] of TLFStack;
 {$endif}
@@ -5626,7 +5592,7 @@ end;
 {$endif ExcludeSmallGranularMoves}
 
 
-{$ifdef ASMVersion}
+{$ifndef PurePascal}
 procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); forward;
 
 
@@ -6323,11 +6289,13 @@ asm
   cmp     rcx, 64
   jbe     @Left64OrLess
 
+{$ifndef fpc}
 {$ifdef EnableFSRM}
   // moves of 64 bytes or less are good only when we have fast short strings on 64 bit,
   // but not on 32 bit
   test    FastMMCpuFeatures, FastMMCpuFeatureFSRM
   jnz     @movs
+{$endif}
 {$endif}
 
 @Left64OrLess:
@@ -12431,7 +12399,7 @@ begin
           PLargeBlockHeader(PByte(Result) - LargeBlockHeaderSize)^.UserAllocatedSize := ANewSize;
         {Move the data across}
 {$ifdef UseCustomFixedSizeMoveRoutines}
-        LPSmallBlockType.UpsizeMoveProcedure(APointer^, Result^, LOldAvailableSize);
+        LPSmallBlockType^.UpsizeMoveProcedure(APointer^, Result^, LOldAvailableSize);
 {$else}
         System.Move(APointer^, Result^, LOldAvailableSize);
 {$endif}
@@ -18251,7 +18219,7 @@ it in bits 63-32 under 64-bit, although the xgetbv instruction only accepts
   {$endif}
 {$endif}
 
-{$ifdef ASMVersion}
+{$ifndef PurePascal}
 function GetCpuXCR(Arg: NativeUint): Int64; assembler;
 asm
  {$ifdef 64bit}
@@ -18868,22 +18836,22 @@ ENDQUOTE}
       // Fast Short REP MOVSB is very fast under 64-bit
       case SmallBlockTypes[LInd].BlockSize of
          {$ifndef Align32Bytes}
-         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move8;
+         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move8;
          {$ifndef Align16Bytes}
-         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move16;
+         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move16;
          {$endif Align16Bytes}
          {$endif Align32Bytes}
-         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24Reg64;
+         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24Reg64;
          {$ifndef Align32Bytes}
          {$ifndef Align16Bytes}
-         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move32Reg64;
+         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move32Reg64;
          {$endif}
-         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move40Reg64;
+         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move40Reg64;
          {$ifndef Align16Bytes}
-         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move48Reg64;
+         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move48Reg64;
          {$endif}
          {$endif}
-         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56Reg64;
+         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56Reg64;
          else  SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
       end;
     end;
@@ -18902,17 +18870,17 @@ ENDQUOTE}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX512;
-         32*02: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56AVX512;
-         32*03: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move88AVX512;
-         32*04: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move120AVX512;
-         32*05: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move152AVX512;
-         32*06: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move184AVX512;
-         32*07: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move216AVX512;
-         32*08: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move248AVX512;
-         32*09: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move280AVX512;
-         32*10: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move312AVX512;
-         32*11: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move344AVX512;
+         32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX512;
+         32*02: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX512;
+         32*03: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX512;
+         32*04: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX512;
+         32*05: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX512;
+         32*06: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX512;
+         32*07: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX512;
+         32*08: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move248AVX512;
+         32*09: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move280AVX512;
+         32*10: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move312AVX512;
+         32*11: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move344AVX512;
       end;
     end else
   {$endif}
@@ -18923,13 +18891,13 @@ ENDQUOTE}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX2;
-         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56AVX2;
-         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move88AVX2;
-         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move120AVX2;
-         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move152AVX2;
-         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move184AVX2;
-         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move216AVX2;
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX2;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX2;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX2;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX2;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX2;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX2;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX2;
       end;
     end else
     {$endif DisableAVX2}
@@ -18940,13 +18908,13 @@ ENDQUOTE}
       then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move24AVX1;
-         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move56AVX1;
-         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move88AVX1;
-         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move120AVX1;
-         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move152AVX1;
-         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move184AVX1;
-         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := Move216AVX1;
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX1;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX1;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX1;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX1;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX1;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX1;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX1;
      end;
     end else
    {$endif}
@@ -18974,16 +18942,16 @@ ENDQUOTE}
       {$endif}
       {$endif}
         begin
-          SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx2WithErms;
+          SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2WithErms;
         end;
       end else
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx2NoErms;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2NoErms;
       end;
     end else
     if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
-      SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx1NoErms;
+      SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx1NoErms;
     end else
     {$endif EnableAVX}
     begin
@@ -18992,11 +18960,11 @@ ENDQUOTE}
         {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
       end else
       {$endif}
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX16LP;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP;
       end;
     end;
     {$else Align32Bytes}
@@ -19525,27 +19493,6 @@ begin
 end;
 {$endif}
 
-{$ifdef AllowFreeBlockLater}
-procedure FreeSaved;
-var
-  LInd: Integer;
-  p: Pointer;
-begin
-  for LInd := 0 to High(SmallBlockTypes) do
-  begin
-    {$IFDEF FPC}
-    p := PVOID(InterlockedExchange64(LONGLONG(SmallBlockTypes[LInd].FreeBlockLater), LONGLONG(0)));
-    {$ELSE}
-    p := InterlockedExchangePointer(SmallBlockTypes[LInd].FreeBlockLater, nil);
-    {$ENDIF}
-    if p <> nil then
-    begin
-      FreeMem(p);
-    end;
-  end;
-end;
-{$endif}
-
 procedure FinalizeMemoryManager;
 {$ifdef SmallBlocksLockedCriticalSection}
 var
@@ -19558,9 +19505,6 @@ begin
 {$ifdef UseReleaseStack}
   DestroyCleanupThread;
   CleanupReleaseStacks;
-{$endif}
-{$ifdef AllowFreeBlockLater}
-  FreeSaved;
 {$endif}
 {$ifndef NeverUninstall}
     {Uninstall FastMM}
