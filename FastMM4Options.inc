@@ -231,7 +231,7 @@ at the beginning of the main .pas file for the discussion }
  which is faster than the pascal version. Disable only for debugging purposes.
  Setting the CheckHeapForCorruption option automatically disables this option.}
 
-{.$define ASMVersion} // "AsmVersion" is not supported in version 1.06
+{$define ASMVersion}
 
 
 {Set this option to disable any inline assembly at all. However, it would not
