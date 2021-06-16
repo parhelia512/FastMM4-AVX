@@ -1634,11 +1634,11 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 
 
-{$ifdef Align16bytes}
+{$ifdef Align16Bytes}
 {$define AlignAtLeast16Bytes}
 {$endif}
 
-{$ifdef Align32bytes}
+{$ifdef Align32Bytes}
 {$define AlignAtLeast16Bytes}
 {$endif}
 
@@ -1668,6 +1668,17 @@ const
   {The current version of FastMM4-AVX}
   FastMM4AvxVersion = '1.06';
   {The number of small block types}
+
+
+{$ifdef Align32Bytes}
+  AlignmentMask = 31;
+{$else}
+{$ifdef Align16Bytes}
+  AlignmentMask = 15;
+{$else}
+  AlignmentMask = 7;
+{$endif}
+{$endif}
 
 {$ifdef Align32Bytes}
   NumSmallBlockTypes = 44;
@@ -2153,7 +2164,7 @@ function usleep(__useconds:dword):longint;cdecl;external clib name 'usleep';
 
 {Fixed size move procedures. The 64-bit versions assume 16-byte alignment.}
 {$ifdef 64bit}
-{$ifdef align32bytes}
+{$ifdef Align32Bytes}
   {Used to exclude the procedures that we don't need, from compiling, to not
   rely on the "smart" linker to do this job for us}
   {$define ExcludeSmallGranularMoves}
@@ -2202,8 +2213,15 @@ function InvalidRegisterAndUnRegisterMemoryLeak(APointer: Pointer): Boolean; for
 {-------------------------Private constants----------------------------}
 
 const
+
+{$ifdef Align32Bytes}
+  MediumBlockSizeOffset = 64;
+{$else}
+  MediumBlockSizeOffset = 48;
+{$endif}
+
   {The size of a medium block pool. This is allocated through VirtualAlloc and
-   is used to serve medium blocks. The size must be a multiple of 16 and at
+   is used to serve medium blocks. The size must be a multiple of 16 (or 32, depending on alignment) and at
    least "SizeOf(Pointer)" bytes less than a multiple of 4K (the page size) to
    prevent a possible read access violation when reading past the end of a
    memory block in the optimized move routine (MoveX16LP/MoveX32LP).
@@ -2211,7 +2229,15 @@ const
    do a memory dump.}
   MediumBlockPoolSize = 20 * 64 * 1024 -
   {$ifndef FullDebugMode}
-       16
+    {$ifdef Align32Bytes}
+          32
+    {$else}
+      {$ifdef Align16Bytes}
+          16
+      {$else}
+          8
+      {$endif}
+    {$endif}
   {$else}
       256
   {$endif};
@@ -2244,7 +2270,6 @@ const
   MediumBlockGranularityPowerOf2 = 8;
   MediumBlockGranularity = UnsignedBit shl MediumBlockGranularityPowerOf2;
   MediumBlockGranularityMask = NativeUInt(-NativeInt(MediumBlockGranularity));
-  MediumBlockSizeOffset = 48;
 
   {The granularity of large blocks}
   LargeBlockGranularity = 65536;
@@ -2317,8 +2342,13 @@ const
   ExtractSmallFlagsMask = NativeUint(7);
   {$endif}
   {The flags masks for medium and large blocks}
-  DropMediumAndLargeFlagsMask = NativeUint(-16);
-  ExtractMediumAndLargeFlagsMask = NativeUint(15);
+{$ifdef Align32Bytes}
+  DropMediumAndLargeFlagsMask = -32;
+  ExtractMediumAndLargeFlagsMask = 31;
+{$else}
+  DropMediumAndLargeFlagsMask = -16;
+  ExtractMediumAndLargeFlagsMask = 15;
+{$endif}
   {-------------Block resizing constants---------------}
   {The upsize and downsize checker must a a multiple of the granularity,
    otherwise on big-granularity and small upsize/downsize constant values,
@@ -2500,7 +2530,7 @@ type
 {$endif}
   end;
 
-  {Small block pool (Size = 32 bytes for 32-bit, 48 bytes for 64-bit).}
+  {Small block pool (Size = 32 bytes for 32-bit, 64 bytes for 64-bit).}
   TSmallBlockPoolHeader = record
     {BlockType}
     BlockType: PSmallBlockType;
@@ -2523,6 +2553,9 @@ type
     Reserved2: Cardinal;
     {The pool pointer and flags of the first block}
     FirstBlockPoolPointerAndFlags: NativeUInt;
+{$ifdef 64bit}
+    Reserved3, Reserved4: Pointer; // Align the structure to 64-bit size
+{$endif}
   end;
 
   {Small block layout:
@@ -2543,6 +2576,11 @@ type
     NextMediumBlockPoolHeader: PMediumBlockPoolHeader;
     {Padding}
     Reserved1: NativeUInt;
+    {$ifdef 32bit}
+    {$ifdef Align32Bytes}
+    Reserved2, Reserved3, Reserved4, Reserved5: Pointer;
+    {$endif}
+    {$endif}
     {The block size and flags of the first medium block in the block pool}
     FirstMediumBlockSizeAndFlags: NativeUInt;
   end;
@@ -2564,13 +2602,18 @@ type
 
   {-------------------------Large block structures------------------------}
 
-  {Large block header record (Size = 16 for 32-bit, 32 for 64-bit)}
+  {Large block header record (Size = 16 for 32-bit unless we have 32-bytes alignment, 32 for 64-bit or if we have 32-bytes alignment)}
   PLargeBlockHeader = ^TLargeBlockHeader;
   TLargeBlockHeader = record
     {Points to the previous and next large blocks. This circular linked
      list is used to track memory leaks on program shutdown.}
     PreviousLargeBlockHeader: PLargeBlockHeader;
     NextLargeBlockHeader: PLargeBlockHeader;
+    {$ifdef 32bit}
+    {$ifdef Align32Bytes}
+    Reserved1, Reserved2, Reserved3, Reserved4: Pointer;
+    {$endif}
+    {$endif}
     {The user allocated size of the Large block}
     UserAllocatedSize: NativeUInt;
     {The size of this block plus the flags}
@@ -2665,7 +2708,7 @@ const
   {The size of the block header in front of small and medium blocks}
   BlockHeaderSize = SizeOf(Pointer);
 
-  {The size of a small block pool header: 32 bytes for 32-bit, 48 bytes for 64-bit).}
+  {The size of a small block pool header: 32 bytes for 32-bit, 64 bytes for 64-bit).}
   SmallBlockPoolHeaderSize = SizeOf(TSmallBlockPoolHeader);
   {$ifdef OperatorsInDefinesSupported}
     {$ifdef 32bit}
@@ -2673,8 +2716,8 @@ const
        {$Message Fatal 'SmallBlockPoolHeaderSize should be 32 bytes for 32-bit'}
     {$ifend}
     {$else}
-    {$if SmallBlockPoolHeaderSize <> 48}
-       {$Message Fatal 'SmallBlockPoolHeaderSize should be 48 bytes for 64-bit'}
+    {$if SmallBlockPoolHeaderSize <> 64}
+       {$Message Fatal 'SmallBlockPoolHeaderSize should be 64 bytes for 64-bit'}
     {$ifend}
     {$endif}
   {$endif}
@@ -2683,9 +2726,15 @@ const
   MediumBlockPoolHeaderSize = SizeOf(TMediumBlockPoolHeader);
   {$ifdef OperatorsInDefinesSupported}
     {$ifdef 32bit}
-    {$if MediumBlockPoolHeaderSize <> 16}
-       {$Message Fatal 'MediumBlockPoolHeaderSize should be 16 bytes for 32-bit'}
-    {$ifend}
+      {$ifdef Align32Bytes}
+        {$if MediumBlockPoolHeaderSize <> 32}
+           {$Message Fatal 'MediumBlockPoolHeaderSize should be 32 bytes for 32-bit with 32-bytes alignment'}
+        {$ifend}
+      {$else}
+        {$if MediumBlockPoolHeaderSize <> 16}
+           {$Message Fatal 'MediumBlockPoolHeaderSize should be 16 bytes for 32-bit unless we have 32-bytes alignment'}
+        {$ifend}
+      {$endif}
     {$else}
     {$if MediumBlockPoolHeaderSize <> 32}
        {$Message Fatal 'MediumBlockPoolHeaderSize should be 32 bytes for 64-bit'}
@@ -7963,10 +8012,10 @@ asm
   {Get a pointer to the last sequentially allocated medium block}
   mov eax, LastSequentiallyFedMediumBlock
   {Is the block that was last fed sequentially free?}
-  test byte ptr [eax - 4], IsFreeBlockFlag
+  test byte ptr [eax - BlockHeaderSize], IsFreeBlockFlag
   jnz @LastBlockFedIsFree
   {Set the "previous block is free" flag in the last block fed}
-  or dword ptr [eax - 4], PreviousMediumBlockIsFreeFlag
+  or dword ptr [eax - BlockHeaderSize], PreviousMediumBlockIsFreeFlag
   {Get the remainder in edx}
   mov edx, MediumSequentialFeedBytesLeft
   {Point eax to the start of the remainder}
@@ -7987,7 +8036,7 @@ asm
 @LastBlockFedIsFree:
   {Drop the flags}
   mov edx, DropMediumAndLargeFlagsMask
-  and edx, [eax - 4]
+  and edx, [eax - BlockHeaderSize]
   {Free the last block fed}
   cmp edx, MinimumMediumBlockSize
   jb @DontRemoveLastFed
@@ -7996,7 +8045,7 @@ asm
   {Re-read eax and edx}
   mov eax, LastSequentiallyFedMediumBlock
   mov edx, DropMediumAndLargeFlagsMask
-  and edx, [eax - 4]
+  and edx, [eax - BlockHeaderSize]
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DontRemoveLastFed:
   {Get the number of bytes left in ecx}
@@ -8512,9 +8561,13 @@ begin
       {The number of bytes to move is the old user size.}
 {$ifdef UseCustomVariableSizeMoveRoutines}
    {$ifdef Align32Bytes}
-      MoveX32LPUniversal(APointer^, Result^, LOldUserSize);
+        MoveX32LPUniversal(APointer^, Result^, LOldUserSize);
    {$else}
-      MoveX16LP(APointer^, Result^, LOldUserSize);
+     {$ifdef Align16Bytes}
+        MoveX16LP(APointer^, Result^, LOldUserSize);
+     {$else}
+        MoveX8LP(APointer^, Result^, LOldUserSize);
+     {$endif}
    {$endif}
 {$else}
       System.Move(APointer^, Result^, LOldUserSize);
@@ -8733,6 +8786,19 @@ const
     function FastGetMemAssembler(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif fpc}{$endif XE2AndUp}{$ifdef FullDebugMode}{$ifdef LogLockContention}; var ACollector: PStaticCollector{$endif}{$endif}): Pointer; forward;
   {$endif}
 {$endif}
+
+{$ifdef DEBUG}
+procedure BadAlignmentOnGetMem;
+begin
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
+end;
+{$endif}
+
+
 
 
 function FastGetMem(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif fpc}{$endif XE2AndUp}{$ifdef FullDebugMode}{$ifdef LogLockContention}; var ACollector: PStaticCollector{$endif}{$endif}): Pointer;
@@ -9527,7 +9593,7 @@ like IsMultithreaded or MediumBlocksLocked}
   add TSmallBlockPoolHeader[edx].BlocksInUse, 1
   {Store the next sequential feed block address}
   mov TSmallBlockType[ebx].NextSequentialFeedBlockAddress, ecx
-  mov [eax - 4], edx
+  mov [eax - BlockHeaderSize], edx
   jmp @UnlockSmallBlockAndExit
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @RemoveSmallPool:
@@ -9826,13 +9892,13 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 @UseWholeBlock:
   {esi = free block, ebx = block type, edi = block size}
   {Mark this block as used in the block following it}
-  and byte ptr [esi + edi - 4], not PreviousMediumBlockIsFreeFlag
+  and byte ptr [esi + edi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlock:
   {esi = free block, ebx = block type, edi = block size}
   {Set the size and flags for this block}
   lea ecx, [edi + IsMediumBlockFlag + IsSmallBlockPoolInUseFlag]
-  mov [esi - 4], ecx
+  mov [esi - BlockHeaderSize], ecx
 {$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlksAftrGotMedBlk
@@ -9866,7 +9932,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   sub edi, ecx
   mov TSmallBlockType[ebx].MaxSequentialFeedBlockAddress, edi
   {Set the small block header}
-  mov [eax - 4], esi
+  mov [eax - BlockHeaderSize], esi
   {Restore registers}
   pop edi
   pop esi
@@ -9947,7 +10013,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   mov MediumSequentialFeedBytesLeft, ecx
   {Set the flags for the block}
   or ebx, IsMediumBlockFlag
-  mov [eax - 4], ebx
+  mov [eax - BlockHeaderSize], ebx
   jmp @MediumBlockGetDone
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @AllocateNewSequentialFeedForMedium:
@@ -9999,7 +10065,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {esi = free block, ebx = block size}
   {Get the size of the available medium block in edi}
   mov edi, DropMediumAndLargeFlagsMask
-  and edi, [esi - 4]
+  and edi, [esi - BlockHeaderSize]
   {Get the size of the second split in edx}
   mov edx, edi
   sub edx, ebx
@@ -10018,12 +10084,12 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @UseWholeBlockForMedium:
   {Mark this block as used in the block following it}
-  and byte ptr [esi + edi - 4], not PreviousMediumBlockIsFreeFlag
+  and byte ptr [esi + edi - BlockHeaderSize], not PreviousMediumBlockIsFreeFlag
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @GotMediumBlockForMedium:
   {Set the size and flags for this block}
   lea ecx, [ebx + IsMediumBlockFlag]
-  mov [esi - 4], ecx
+  mov [esi - BlockHeaderSize], ecx
 {$ifndef AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMediumLocked)
   jz @DontUnlMedBlkAftrGotMedBlkForMedium
@@ -10066,6 +10132,12 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   pop ebp
 {$endif}
 @Finish:
+{$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMemC
+  jmp    BadAlignmentOnGetMem
+@@OkAlignmentOnGetMemC:
+{$endif}
 end;
 {$else}
 {64-bit BASM implementation}
@@ -10697,6 +10769,13 @@ but we don't need them at this point - we only save RAX}
   pop rsi
   pop rbx
 {$endif}
+{$ifdef DEBUG}
+  test rax, AlignmentMask
+  jz @@OkAlignmentOnGetMemD
+  jmp    BadAlignmentOnGetMem
+@@OkAlignmentOnGetMemD:
+{$endif}
+
 end;
 {$endif}
 {$endif FastGetMemNeedAssemblerCode}
@@ -10972,6 +11051,17 @@ begin
 {$endif UseReleaseStack}
 end;
 {$endif FastFreememNeedAssemberCode}
+
+{$ifdef DEBUG}
+procedure BadAlignmentOnFreeMem;
+begin
+  {$ifdef BCB6OrDelphi7AndUp}
+    System.Error(reInvalidPtr);
+  {$else}
+    System.RunError(reInvalidPtr);
+  {$endif}
+end;
+{$endif}
 
 {Replacement for SysFreeMem}
 function FastFreeMem(APointer: Pointer): {$ifdef fpc}{$ifdef CPU64}PtrUInt{$else}NativeUInt{$endif}{$else}Integer{$endif};
@@ -11594,7 +11684,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Can we combine this block with the previous free block? We need to
    re-read the flags since it could have changed before we could lock the
    medium blocks.}
-  test byte ptr [esi - 4], PreviousMediumBlockIsFreeFlag
+  test byte ptr [esi - BlockHeaderSize], PreviousMediumBlockIsFreeFlag
   jnz @PreviousBlockIsFree
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockChecked:
@@ -11606,9 +11696,9 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 @BinFreeMediumBlock:
   {Store the size of the block as well as the flags}
   lea eax, [ebx + IsMediumBlockFlag + IsFreeBlockFlag]
-  mov [esi - 4], eax
+  mov [esi - BlockHeaderSize], eax
   {Store the trailing size marker}
-  mov [esi + ebx - 8], ebx
+  mov [esi + ebx - BlockHeaderSize*2], ebx
   {Insert this block back into the bins: Size check not required here,
    since medium blocks that are in use are not allowed to be
    shrunk smaller than MinimumMediumBlockSize}
@@ -11651,7 +11741,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNodot}align{$else}.align{$endif} 8{$endif}
 @PreviousBlockIsFree:
   {Get the size of the free block just before this one}
-  mov ecx, [esi - 8]
+  mov ecx, [esi - BlockHeaderSize*2]
   {Include the previous block}
   sub esi, ecx
   {Set the new block size}
@@ -11769,8 +11859,15 @@ end;
 {$else 32Bit}
 
 {---------------64-bit BASM FastFreeMem---------------}
-assembler;
+assembler;  // rcx = address
 asm
+  {$ifdef DEBUG}
+  test   rcx, AlignmentMask
+  jz     @@OkAlign
+  jmp    BadAlignmentOnFreeMem
+@@OkAlign:
+  {$endif}
+
   {Do not put ".noframe" here, for the reasons given at the comment
   in the "BinMediumSequentialFeedRemainder" function at the start of the
   64-bit assembly code}
@@ -12268,6 +12365,7 @@ end;
 {$endif 32Bit}
 {$endif FastFreememNeedAssemberCode}
 
+
 {$ifndef FullDebugMode}
 {Replacement for SysReallocMem}
 function FastReallocMem({$ifdef fpc}var {$endif}APointer: Pointer; ANewSize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUInt{$else}Integer{$endif}{$endif}): Pointer;
@@ -12634,7 +12732,11 @@ begin
    {$ifdef Align32Bytes}
           MoveX32LPUniversal(APointer^, Result^, LOldAvailableSize);
    {$else}
+     {$ifdef Align16Bytes}
           MoveX16LP(APointer^, Result^, LOldAvailableSize);
+     {$else}
+          MoveX8LP(APointer^, Result^, LOldAvailableSize);
+     {$endif}
    {$endif}
 {$else}
           System.Move(APointer^, Result^, LOldAvailableSize);
@@ -12753,6 +12855,12 @@ asm
   je @SizeIsZero
   mov eax, edx
   call FastGetMem
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem1
+  jmp    BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem1:
+  {$endif}
   mov [esi], eax
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 2{$endif}
 @SizeIsZero:
@@ -12818,6 +12926,12 @@ asm
   {Allocated OK?}
   test eax, eax
   jz @Exit2Reg
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem2
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem2:
+  {$endif}
   {Move data across: count in ecx}
   mov ecx, ebx
   {Destination in edx}
@@ -12871,12 +12985,18 @@ asm
   {Allocated OK?}
   test eax, eax
   jz @Exit3Reg
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem3
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem3:
+  {$endif}
   {Do we need to store the requested size? Only large blocks store the
    requested size.}
   cmp edi, MaximumMediumBlockSize - BlockHeaderSize
   jbe @NotSmallUpsizeToLargeBlock
   {Store the user requested size}
-  mov [eax - 8], edi
+  mov [eax - BlockHeaderSize*2], edi
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @NotSmallUpsizeToLargeBlock:
   {Get the size to move across}
@@ -12984,21 +13104,21 @@ asm
   {Reread the flags - they may have changed before medium blocks could be
    locked.}
   mov ebx, ExtractMediumAndLargeFlagsMask
-  and ebx, [esi - 4]
+  and ebx, [esi - BlockHeaderSize]
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @DoMediumInPlaceDownsize:
   {Set the new size}
   or ebx, ebp
-  mov [esi - 4], ebx
+  mov [esi - BlockHeaderSize], ebx
   {Get the second split size in ebx}
   mov ebx, ecx
   {Is the next block in use?}
-  mov edx, [edi - 4]
+  mov edx, [edi - BlockHeaderSize]
   test dl, IsFreeBlockFlag
   jnz @MediumDownsizeNextBlockFree
   {The next block is in use: flag its previous block as free}
   or edx, PreviousMediumBlockIsFreeFlag
-  mov [edi - 4], edx
+  mov [edi - BlockHeaderSize], edx
   jmp @MediumDownsizeDoSplit
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeNextBlockFree:
@@ -13013,7 +13133,7 @@ asm
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumDownsizeDoSplit:
   {Store the trailing size field}
-  mov [edi - 8], ebx
+  mov [edi - BlockHeaderSize*2], ebx
   {Store the free part's header}
   lea eax, [ebx + IsMediumBlockFlag + IsFreeBlockFlag];
   mov [esi + ebp - BlockHeaderSize], eax
@@ -13052,6 +13172,13 @@ asm
   call FastGetMem
   test eax, eax
   jz @Exit4Reg
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem4
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem4:
+  {$endif}
+
   {Save the result}
   mov ebp, eax
   mov edx, eax
@@ -13081,7 +13208,7 @@ asm
   {Status: ecx = Current Block Size - 4, bl = Current Block Flags,
    edi = @Next Block, eax/esi = APointer, edx = Requested Size}
   {Can we do an in-place upsize?}
-  mov eax, [edi - 4]
+  mov eax, [edi - BlockHeaderSize]
   test al, IsFreeBlockFlag
   jz @CannotUpsizeMediumBlockInPlace
   {Get the total available size including the next block}
@@ -13112,9 +13239,9 @@ asm
   {Re-read the info for this block (since it may have changed before the medium
    blocks could be locked)}
   mov ebx, ExtractMediumAndLargeFlagsMask
-  and ebx, [esi - 4]
+  and ebx, [esi - BlockHeaderSize]
   {Re-read the info for the next block}
-  mov eax, [edi - 4]
+  mov eax, [edi - BlockHeaderSize]
   {Next block still free?}
   test al, IsFreeBlockFlag
   jz @NextMediumBlockChanged
@@ -13160,16 +13287,16 @@ asm
   {Grab the whole block: Mark it as used in the block following it}
   and dword ptr [esi + ebp], not PreviousMediumBlockIsFreeFlag
   {The block size is the full available size plus header}
-  add ebp, 4
+  add ebp, BlockHeaderSize
   {Upsize done}
   jmp @MediumUpsizeInPlaceDone
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 8{$endif}
 @MediumInPlaceUpsizeSplit:
   {Store the size of the second split as the second last dword}
-  mov [esi + ebp - 4], edx
+  mov [esi + ebp - BlockHeaderSize], edx
   {Set the second split header}
   lea edi, [edx + IsMediumBlockFlag + IsFreeBlockFlag]
-  mov [esi + eax - 4], edi
+  mov [esi + eax - BlockHeaderSize], edi
   mov ebp, eax
   cmp edx, MinimumMediumBlockSize
   jb @MediumUpsizeInPlaceDone
@@ -13179,7 +13306,7 @@ asm
 @MediumUpsizeInPlaceDone:
   {Set the size and flags for this block}
   or ebp, ebx
-  mov [esi - 4], ebp
+  mov [esi - BlockHeaderSize], ebp
 
   {Result = old pointer}
   mov eax, esi
@@ -13248,10 +13375,16 @@ asm
   {Success?}
   test eax, eax
   jz @Exit4Reg
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem5
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem5:
+  {$endif}
   {If it's a Large block - store the actual user requested size}
   cmp ebp, MaximumMediumBlockSize - BlockHeaderSize
   jbe @MediumUpsizeNotLarge
-  mov [eax - 8], edx
+  mov [eax - BlockHeaderSize*2], edx
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 4{$endif}
 @MediumUpsizeNotLarge:
   {Save the result}
@@ -13264,7 +13397,11 @@ asm
 {$ifdef Align32Bytes}
   call MoveX32LPUniversal
 {$else}
+  {$ifdef Align16Bytes}
   call MoveX16LP
+  {$else}
+  call MoveX8LP
+  {$endif}
 {$endif}
 {$else}
   call System.Move
@@ -13399,6 +13536,12 @@ asm
   {Allocated OK?}
   test rax, rax
   jz @Done
+  {$ifdef DEBUG}
+  test rax, AlignmentMask
+  jz @@OkAlignmentOnGetMem6
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem6:
+  {$endif}
   {Move data across: count in r8}
   mov r8, rbx
   {Destination in edx}
@@ -13450,6 +13593,12 @@ asm
   {Allocated OK?}
   test rax, rax
   jz @Done
+  {$ifdef DEBUG}
+  test rax, AlignmentMask
+  jz @@OkAlignmentOnGetMem7
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem7:
+  {$endif}
   {Do we need to store the requested size? Only large blocks store the
    requested size.}
   cmp rdi, MaximumMediumBlockSize - BlockHeaderSize
@@ -13632,6 +13781,12 @@ but we don't need them at this point, since we are about to exit}
   call FastGetMem
   test rax, rax
   jz @Done
+  {$ifdef DEBUG}
+  test rax, AlignmentMask
+  jz @@OkAlignmentOnGetMem8
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem8:
+  {$endif}
   {Save the result}
   mov r15, rax
   mov rdx, rax
@@ -13840,6 +13995,12 @@ so ew save RCX and RDX}
   {Success?}
   test eax, eax
   jz @Done
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMem9
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMem9:
+  {$endif}
   {If it's a Large block - store the actual user requested size}
   cmp r15, MaximumMediumBlockSize - BlockHeaderSize
   jbe @MediumUpsizeNotLarge
@@ -13856,7 +14017,11 @@ so ew save RCX and RDX}
 {$ifdef Align32Bytes}
   call MoveX32LPUniversal
 {$else}
+  {$ifdef Align16Bytes}
   call MoveX16LP
+  {$else}
+  call MoveX8LP
+  {$endif}
 {$endif}
 {$else}
   call System.Move
@@ -13923,6 +14088,13 @@ asm
   and ebx, -4
   {Get the block}
   call FastGetMem
+  {$ifdef DEBUG}
+  test eax, AlignmentMask
+  jz @@OkAlignmentOnGetMemA
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMemA:
+  {$endif}
+
   {Could a block be allocated? ecx = 0 if yes, $ffffffff if no}
   cmp eax, 1
   sbb ecx, ecx
@@ -14000,6 +14172,12 @@ asm
   and rbx, -8
   {Get the block}
   call FastGetMem
+  {$ifdef DEBUG}
+  test rax, AlignmentMask
+  jz @@OkAlignmentOnGetMemB
+  jmp BadAlignmentOnGetMem
+@@OkAlignmentOnGetMemB:
+  {$endif}
   {Could a block be allocated? rcx = 0 if yes, -1 if no}
   cmp rax, 1
   sbb rcx, rcx
