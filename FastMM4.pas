@@ -2232,15 +2232,11 @@ const
     {$ifdef Align32Bytes}
           32
     {$else}
-      {$ifdef Align16Bytes}
           16
-      {$else}
-          8
-      {$endif}
-    {$endif}
+    {$endif Align32Bytes}
   {$else}
       256
-  {$endif};
+  {$endif FullDebugMode};
 
   UnsignedBit = NativeUInt(1);
 
