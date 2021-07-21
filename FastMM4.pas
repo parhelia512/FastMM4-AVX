@@ -1726,7 +1726,7 @@ type
   {$ifend}
 {$else}
   {$ifndef fpc}
-  PByte = PAnsiChar;
+  PByte = PAnsiChar; {$define PByteIsPAnsiChar}
   NativeInt = Integer;
   NativeUInt = Cardinal;
   PNativeUInt = ^Cardinal;
@@ -7279,7 +7279,7 @@ begin
     if LClassInfo <> nil then // prepend the UnitName
     begin
       LClassInfoPByte := LClassInfo;
-      LClassInfoByte1 := PByte(LClassInfoPByte + 1)^;
+      LClassInfoByte1 := {$ifndef PByteIsPAnsiChar}Byte{$endif}(PByte(LClassInfoPByte + 1)^);
       Inc(LClassInfoPByte, 2);
       Inc(LClassInfoPByte, LClassInfoByte1);
       LClassData := PClassData(LClassInfoPByte);
