@@ -1528,14 +1528,15 @@ of just one option: "Boolean short-circuit evaluation".}
 {$endif}
 
 {$ifdef PasCodeAlign}
-  {$IFNDEF FPC}
-  {$CODEALIGN 16}
-  {$ENDIF}
-  {$IFDEF FPC}
-  {$CODEALIGN PROC=32}
-  {$CODEALIGN JUMP=16}
-  {$CODEALIGN LOOP=8}
-  {$ENDIF}
+  {$ifdef FPC}
+    {$CODEALIGN PROC=32}
+    {$CODEALIGN JUMP=16}
+    {$CODEALIGN LOOP=8}
+  {$else}
+    {$ifdef XE2AndUp}
+      {$CODEALIGN 16}
+    {$endif}
+  {$endif}
 {$endif}
 
 {$ifndef AsmVersion}
@@ -7510,7 +7511,7 @@ const
 const
   CpuFeaturePauseAndSwitch = True;
 {$else}
-function CpuFeaturePauseAndSwitch: Boolean; {$ifdef FASTMM4_ALLOW_INLINES}inline;{$ENDIF}
+function CpuFeaturePauseAndSwitch: Boolean; {$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}
 begin
   {$ifdef USE_CPUID}
   Result := FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0
@@ -16900,7 +16901,7 @@ begin
   begin
     try
       {Log all allocated blocks by class.}
-      LCallback := {$IFDEF FPC}@{$ENDIF}LogMemoryManagerStateCallBack;
+      LCallback := {$ifdef FPC}@{$endif}LogMemoryManagerStateCallBack;
       WalkAllocatedBlocks(LCallback, LPLogInfo);
       {Sort the classes by total memory usage: Do the initial QuickSort pass over the list to sort the list in groups
        of QuickSortMinimumItemsInPartition size.}
@@ -18634,13 +18635,13 @@ units). }
 {$endif}
   {$ifndef NoMessageBoxes}
     AppendStringToModuleName(MemoryAllocatedTitle, LErrorMessageTitle, Length(MemoryAllocatedTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
-    {$IFDEF FPC}
+    {$ifdef FPC}
     ShowMessageBox('In FreePascal, we cannot rely on HeapTotalAllocated to check '+
     'whether FastMM4 is the first unit and no memory has been allocated before, '+
     'by another memory manager, because the initialization section of the "system.pp" '+
-    'unit of FreePascal calls the setup_arguments function to allocate memory for the command line buffers and store these pointers in the "argc" global variable (checked in versions 3.0.4 and 3.2.0). However, the version 3.3.1 allocates even more memory in the initialization of "system.pp". See https://bugs.freepascal.org/view.php?id=38391 for more details. Please double-check that the FastMM4 unit is the first unit in the units ("uses") list of your .lpr file (or any other main file where you define project units). You can recompile FastMM4-AVX with the IgnoreMemoryAllocatedBefore conditional define, but, in this case, there will be no check whether the FastMM4 is the first unit in the units section, and if it is not the first, you will get errors. Please consider supporting the https://bugs.freepascal.org/view.php?id=38391 and/or improving FreePascal to fix the bug registered under that URL.', LErrorMessageTitle);    {$ELSE}
+    'unit of FreePascal calls the setup_arguments function to allocate memory for the command line buffers and store these pointers in the "argc" global variable (checked in versions 3.0.4 and 3.2.0). However, the version 3.3.1 allocates even more memory in the initialization of "system.pp". See https://bugs.freepascal.org/view.php?id=38391 for more details. Please double-check that the FastMM4 unit is the first unit in the units ("uses") list of your .lpr file (or any other main file where you define project units). You can recompile FastMM4-AVX with the IgnoreMemoryAllocatedBefore conditional define, but, in this case, there will be no check whether the FastMM4 is the first unit in the units section, and if it is not the first, you will get errors. Please consider supporting the https://bugs.freepascal.org/view.php?id=38391 and/or improving FreePascal to fix the bug registered under that URL.', LErrorMessageTitle);    {$else}
     ShowMessageBox(MemoryAllocatedMsg, LErrorMessageTitle);
-    {$ENDIF}
+    {$endif}
   {$endif}
     Exit;
   end;
@@ -18655,13 +18656,13 @@ begin
 {$ifdef DetectMMOperationsAfterUninstall}
   with InvalidMemoryManager do
   begin
-    GetMem :=  {$IFDEF FPC}@{$ENDIF}InvalidGetMem;
-    FreeMem := {$IFDEF FPC}@{$ENDIF}InvalidFreeMem;
-    ReallocMem := {$IFDEF FPC}@{$ENDIF}InvalidReallocMem;
+    GetMem :=  {$ifdef FPC}@{$endif}InvalidGetMem;
+    FreeMem := {$ifdef FPC}@{$endif}InvalidFreeMem;
+    ReallocMem := {$ifdef FPC}@{$endif}InvalidReallocMem;
   {$ifdef BDS2006AndUp}
-    AllocMem := {$IFDEF FPC}@{$ENDIF}InvalidAllocMem;
-    RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}InvalidRegisterAndUnRegisterMemoryLeak;
-    UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}InvalidRegisterAndUnRegisterMemoryLeak;
+    AllocMem := {$ifdef FPC}@{$endif}InvalidAllocMem;
+    RegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}InvalidRegisterAndUnRegisterMemoryLeak;
+    UnRegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}InvalidRegisterAndUnRegisterMemoryLeak;
   {$endif}
   end;
 {$endif}
@@ -18741,11 +18742,11 @@ begin
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
-  {$IFDEF FPC}
+  {$ifdef FPC}
   Pointer(FSwitchToThread)
-  {$ELSE}
+  {$else}
   FSwitchToThread
-  {$ENDIF}
+  {$endif}
   := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
 {$endif}
 {$endif}
@@ -19015,16 +19016,16 @@ ENDQUOTE}
     if ((FastMMCpuFeatures and FastMMCpuFeatureSSE) <> 0) then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move20_32bit_SSE;
-        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move28_32bit_SSE;
-        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move36_32bit_SSE;
-        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move44_32bit_SSE;
-        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move52_32bit_SSE;
-        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move60_32bit_SSE;
-        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move68_32bit_SSE;
-        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move76_32bit_SSE;
-        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move84_32bit_SSE;
-        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move92_32bit_SSE;
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move20_32bit_SSE;
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move28_32bit_SSE;
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move36_32bit_SSE;
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move44_32bit_SSE;
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move52_32bit_SSE;
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move60_32bit_SSE;
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move68_32bit_SSE;
+        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move76_32bit_SSE;
+        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move84_32bit_SSE;
+        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move92_32bit_SSE;
       end;
     end;
     {$endif}
@@ -19035,32 +19036,32 @@ ENDQUOTE}
     begin
       case SmallBlockTypes[LInd].BlockSize of
         {$ifdef 32bit}
-        8: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move4;
+        8: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move4;
         {$endif}
         {$ifndef Align32Bytes}
-        16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move12{$else}Move8{$endif};
+        16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32Bit}Move12{$else}Move8{$endif};
         {$ifndef Align16Bytes}
-        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move20{$else}Move16{$endif};
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32bit}Move20{$else}Move16{$endif};
         {$endif Align16Bytes}
         {$endif Align32Bytes}
 
-        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move28{$else}Move24{$endif};
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32Bit}Move28{$else}Move24{$endif};
 
         {$ifndef Align32Bytes}
         {$ifndef Align16Bytes}
-        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move36{$else}Move32{$endif};
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32bit}Move36{$else}Move32{$endif};
         {$endif}
-        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move44{$else}Move40{$endif};
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32Bit}Move44{$else}Move40{$endif};
         {$ifndef Align16Bytes}
-        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move52{$else}Move48{$endif};
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32Bit}Move52{$else}Move48{$endif};
         {$endif}
         {$endif}
 
-        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32Bit}Move60{$else}Move56{$endif};
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32Bit}Move60{$else}Move56{$endif};
 
         {$ifndef Align32Bytes}
         {$ifndef Align16Bytes}
-        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$ifdef 32bit}Move68{$else}Move64{$endif};
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}{$ifdef 32bit}Move68{$else}Move64{$endif};
         {$endif}
         {$endif}
       end;
@@ -19075,22 +19076,22 @@ ENDQUOTE}
       // Fast Short REP MOVSB is very fast under 64-bit
       case SmallBlockTypes[LInd].BlockSize of
          {$ifndef Align32Bytes}
-         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move8;
+         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move8;
          {$ifndef Align16Bytes}
-         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move16;
+         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move16;
          {$endif Align16Bytes}
          {$endif Align32Bytes}
-         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24Reg64;
+         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move24Reg64;
          {$ifndef Align32Bytes}
          {$ifndef Align16Bytes}
-         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move32Reg64;
+         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move32Reg64;
          {$endif}
-         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move40Reg64;
+         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move40Reg64;
          {$ifndef Align16Bytes}
-         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move48Reg64;
+         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move48Reg64;
          {$endif}
          {$endif}
-         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56Reg64;
+         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move56Reg64;
          else  SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
       end;
     end;
@@ -19109,17 +19110,17 @@ ENDQUOTE}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX512;
-         32*02: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX512;
-         32*03: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX512;
-         32*04: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX512;
-         32*05: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX512;
-         32*06: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX512;
-         32*07: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX512;
-         32*08: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move248AVX512;
-         32*09: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move280AVX512;
-         32*10: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move312AVX512;
-         32*11: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move344AVX512;
+         32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move24AVX512;
+         32*02: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move56AVX512;
+         32*03: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move88AVX512;
+         32*04: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move120AVX512;
+         32*05: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move152AVX512;
+         32*06: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move184AVX512;
+         32*07: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move216AVX512;
+         32*08: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move248AVX512;
+         32*09: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move280AVX512;
+         32*10: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move312AVX512;
+         32*11: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move344AVX512;
       end;
     end else
   {$endif}
@@ -19130,13 +19131,13 @@ ENDQUOTE}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX2;
-         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX2;
-         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX2;
-         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX2;
-         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX2;
-         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX2;
-         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX2;
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move24AVX2;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move56AVX2;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move88AVX2;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move120AVX2;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move152AVX2;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move184AVX2;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move216AVX2;
       end;
     end else
     {$endif DisableAVX2}
@@ -19147,13 +19148,13 @@ ENDQUOTE}
       then
     begin
       case SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX1;
-         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX1;
-         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX1;
-         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX1;
-         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX1;
-         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX1;
-         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX1;
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move24AVX1;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move56AVX1;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move88AVX1;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move120AVX1;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move152AVX1;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move184AVX1;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move216AVX1;
      end;
     end else
    {$endif}
@@ -19181,16 +19182,16 @@ ENDQUOTE}
       {$endif}
       {$endif}
         begin
-          SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2WithErms;
+          SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX32LpAvx2WithErms;
         end;
       end else
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2NoErms;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX32LpAvx2NoErms;
       end;
     end else
     if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
-      SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx1NoErms;
+      SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX32LpAvx1NoErms;
     end else
     {$endif EnableAVX}
     begin
@@ -19199,11 +19200,11 @@ ENDQUOTE}
         {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveWithErmsNoAVX;
       end else
       {$endif}
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX16LP;
       end;
     end;
     {$else Align32Bytes}
@@ -19213,13 +19214,13 @@ ENDQUOTE}
          {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveWithErmsNoAVX;
       end
       else
       {$endif EnableERMS}
       {$endif USE_CPUID}
       begin
-        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX16LP
       end;
       ;
     {$endif Align32Bytes}
@@ -19472,34 +19473,34 @@ begin
 {$endif}
       {We will be using this memory manager}
 {$ifndef FullDebugMode}
-      NewMemoryManager.GetMem := {$IFDEF FPC}@{$ENDIF}FastGetMem;
-      NewMemoryManager.FreeMem := {$IFDEF FPC}@{$ENDIF}FastFreeMem;
-      NewMemoryManager.ReallocMem := {$IFDEF FPC}@{$ENDIF}FastReallocMem;
+      NewMemoryManager.GetMem := {$ifdef FPC}@{$endif}FastGetMem;
+      NewMemoryManager.FreeMem := {$ifdef FPC}@{$endif}FastFreeMem;
+      NewMemoryManager.ReallocMem := {$ifdef FPC}@{$endif}FastReallocMem;
       {$ifdef fpc}
-      NewMemoryManager.FreememSize := {$IFDEF FPC}@{$ENDIF}FastFreeMemSize;
-      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}FastAllocMem;
-      NewMemoryManager.MemSize := {$IFDEF FPC}@{$ENDIF}FastMemSize;
+      NewMemoryManager.FreememSize := {$ifdef FPC}@{$endif}FastFreeMemSize;
+      NewMemoryManager.AllocMem := {$ifdef FPC}@{$endif}FastAllocMem;
+      NewMemoryManager.MemSize := {$ifdef FPC}@{$endif}FastMemSize;
       {$endif}
 {$else}
-      NewMemoryManager.GetMem := {$IFDEF FPC}@{$ENDIF}DebugGetMem;
-      NewMemoryManager.FreeMem := {$IFDEF FPC}@{$ENDIF}DebugFreeMem;
-      NewMemoryManager.ReallocMem := {$IFDEF FPC}@{$ENDIF}DebugReallocMem;
+      NewMemoryManager.GetMem := {$ifdef FPC}@{$endif}DebugGetMem;
+      NewMemoryManager.FreeMem := {$ifdef FPC}@{$endif}DebugFreeMem;
+      NewMemoryManager.ReallocMem := {$ifdef FPC}@{$endif}DebugReallocMem;
 {$endif}
 {$ifdef fpc}
-      NewMemoryManager.GetFPCHeapStatus := {$IFDEF FPC}@{$ENDIF}FastGetFPCHeapStatus; //support get TFPCHeapStatus
+      NewMemoryManager.GetFPCHeapStatus := {$ifdef FPC}@{$endif}FastGetFPCHeapStatus; //support get TFPCHeapStatus
 {$endif}
 {$ifdef BDS2006AndUp}
   {$ifndef FullDebugMode}
-      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}FastAllocMem;
+      NewMemoryManager.AllocMem := {$ifdef FPC}@{$endif}FastAllocMem;
   {$else}
-      NewMemoryManager.AllocMem := {$IFDEF FPC}@{$ENDIF}DebugAllocMem;
+      NewMemoryManager.AllocMem := {$ifdef FPC}@{$endif}DebugAllocMem;
   {$endif}
   {$ifdef EnableMemoryLeakReporting}
-      NewMemoryManager.RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}RegisterExpectedMemoryLeak;
-      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}UnRegisterExpectedMemoryLeak;
+      NewMemoryManager.RegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}RegisterExpectedMemoryLeak;
+      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}UnRegisterExpectedMemoryLeak;
   {$else}
-      NewMemoryManager.RegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}NoOpRegisterExpectedMemoryLeak;
-      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$IFDEF FPC}@{$ENDIF}NoOpUnRegisterExpectedMemoryLeak;
+      NewMemoryManager.RegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}NoOpRegisterExpectedMemoryLeak;
+      NewMemoryManager.UnRegisterExpectedMemoryLeak := {$ifdef FPC}@{$endif}NoOpUnRegisterExpectedMemoryLeak;
   {$endif}
 {$endif}
       {Owns the memory manager}
