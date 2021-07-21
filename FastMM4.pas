@@ -1500,6 +1500,15 @@ interface
 {$define EnableAVX512}
 {$endif}
 
+{$ifdef 32bit}
+  {$ifdef FPC}
+    {$define 32bit_SSE}
+  {$endif}
+  {$ifdef XE2AndUp}
+    {$define 32bit_SSE}
+  {$endif}
+{$endif}
+
 {------------------------Compiler options for FastMM4------------------------}
 
 
@@ -4801,7 +4810,7 @@ asm
 end;
 
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move20_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -4817,7 +4826,7 @@ asm
 {$endif}
   xorps xmm0, xmm0
 end;
-{$endif}
+{$endif 32bit_SSE}
 
 procedure Move20(const ASource; var ADest; ACount: NativeInt); assembler;{$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -4909,7 +4918,7 @@ end;
 
 {$ifndef ExcludeSmallGranularMoves}
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move28_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler;{$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -4926,7 +4935,7 @@ asm
   xorps xmm0, xmm0
   xorps xmm1, xmm1
 end;
-{$endif}
+{$endif 32bit_SSE}
 
 procedure Move28(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -4986,7 +4995,7 @@ asm
 {$endif}
 end;
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move36_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5007,7 +5016,7 @@ asm
   xorps xmm0, xmm0
   xorps xmm1, xmm1
 end;
-{$endif}
+{$endif 32bit_SSE}
 
 procedure Move36(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -5151,7 +5160,7 @@ end;
 
 {$endif}
 
-{$ifdef 32bit}
+{$ifdef 32bit_SSE}
 procedure Move44_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5173,7 +5182,7 @@ asm
   xorps xmm1, xmm1
   xorps xmm2, xmm2
 end;
-{$endif}
+{$endif 32bit_SSE}
 
 procedure Move44(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -5241,7 +5250,7 @@ asm
 end;
 
 
-{$ifdef 32bit}
+{$ifdef 32bit_SSE}
 procedure Move52_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5267,7 +5276,7 @@ asm
   xorps xmm1, xmm1
   xorps xmm2, xmm2
 end;
-{$endif 32bit}
+{$endif 32bit_SSE}
 
 procedure Move52(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -5454,7 +5463,7 @@ end;
 
 {$ifndef ExcludeSmallGranularMoves}
 
-{$ifdef 32bit}
+{$ifdef 32bit_SSE}
 procedure Move60_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5481,7 +5490,7 @@ asm
   xorps xmm2, xmm2
   xorps xmm3, xmm3
 end;
-{$endif 32bit}
+{$endif 32bit_SSE}
 
 procedure Move60(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -5560,7 +5569,7 @@ asm
 {$endif}
 end;
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move68_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5591,7 +5600,7 @@ asm
   xorps xmm2, xmm2
   xorps xmm3, xmm3
 end;
-{$endif 32Bit}
+{$endif 32bit_SSE}
 
 procedure Move68(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -5673,7 +5682,7 @@ asm
 {$endif 32Bit}
 end;
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move76_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5705,9 +5714,9 @@ asm
   xorps xmm3, xmm3
   xorps xmm4, xmm4
 end;
-{$endif 32Bit}
+{$endif 32bit_SSE}
 
-{$ifdef 32bit}
+{$ifdef 32bit_SSE}
 procedure Move84_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5743,10 +5752,10 @@ asm
   xorps xmm3, xmm3
   xorps xmm4, xmm4
 end;
-{$endif 32bit}
+{$endif 32bit_SSE}
 
 
-{$ifdef 32Bit}
+{$ifdef 32bit_SSE}
 procedure Move92_32bit_SSE(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
 {$ifdef AlignAtLeast16Bytes}
@@ -5783,7 +5792,7 @@ asm
   xorps xmm4, xmm4
   xorps xmm5, xmm5
 end;
-{$endif 32bit}
+{$endif 32bit_SSE}
 
 {$endif ExcludeSmallGranularMoves}
 
@@ -19008,7 +19017,7 @@ ENDQUOTE}
     the old size.}
 
 
-    {$ifdef 32bit}
+    {$ifdef 32bit_SSE}
     {$ifndef unix}
     {$ifdef USE_CPUID}
     // if we have SSE, use SSE copy
