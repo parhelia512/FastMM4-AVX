@@ -7279,7 +7279,7 @@ begin
     if LClassInfo <> nil then // prepend the UnitName
     begin
       LClassInfoPByte := LClassInfo;
-      LClassInfoByte1 := {$ifndef PByteIsPAnsiChar}Byte{$endif}(PByte(LClassInfoPByte + 1)^);
+      LClassInfoByte1 := {$ifdef PByteIsPAnsiChar}Byte{$endif}(PByte(LClassInfoPByte + 1)^);
       Inc(LClassInfoPByte, 2);
       Inc(LClassInfoPByte, LClassInfoByte1);
       LClassData := PClassData(LClassInfoPByte);
