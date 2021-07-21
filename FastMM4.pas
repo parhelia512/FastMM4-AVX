@@ -2791,7 +2791,7 @@ const
 {$endif}
 {$endif}
 
-{$ifdef 32bit}
+{$ifdef 32bit_SSE}
   {CPU supports xmm registers in 32-bit mode}
   FastMMCpuFeatureSSE                           = Byte(UnsignedBit shl 6);
 {$endif}
@@ -6355,8 +6355,10 @@ asm
   cmp     ecx, 8
   jb      @below8left
 
+{$ifdef 32bit_SSE}
   cmp     ecx, 32
   jb      @below32left
+
   test    FastMMCpuFeatures, FastMMCpuFeatureSSE
   jz      @NoSSE // no SSE
 
@@ -6377,6 +6379,8 @@ asm
 
 
 @NoSSE:
+{$endif}
+
 @below32left:
   sub     ecx, 8
   js      @below8left_add
@@ -18892,14 +18896,16 @@ This is because the operating system would not save the registers and the states
 {$ifdef 32bit}
       if
         ((LReg1.RegEDX and (UnsignedBit shl 25)) <> 0)
-{$ifdef Use_GetEnabledXStateFeatures_WindowsAPICall}
+  {$ifdef Use_GetEnabledXStateFeatures_WindowsAPICall}
         and ((EnabledXStateFeatures and (UnsignedBit shl XSTATE_LEGACY_SSE)) <> 0)
-{$endif}
+  {$endif}
       then
       begin
+  {$ifdef 32bit_SSE}
         FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureSSE;
+  {$endif}
       end;
-{$endif}
+{$endif 32bit}
 
 { Here is the Intel algorithm to detext AVX }
 { QUOTE from the Intel 64 and IA-32 Architectures Optimization Reference Manual
