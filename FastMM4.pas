@@ -1707,7 +1707,7 @@ type
   {Make sure all the required types are available}
 {$ifdef BCB6OrDelphi6AndUp}
   {$if CompilerVersion < 20}
-  PByte = PAnsiChar;
+  PByte = PAnsiChar; {$define PByteIsPAnsiChar}
   {NativeInt didn't exist or was broken before Delphi 2009.}
   NativeInt = Integer;
   {$ifend}
