@@ -1689,19 +1689,21 @@ const
   FastMM4AvxVersion = '1.06';
   {The current version of FastMM}
   FastMMVersion = '4.993';
-  {The number of small block types}
 
-
+  {A bit mask to check memory block alignment in DEBUG mode}
+{$ifdef DEBUG}
 {$ifdef Align32Bytes}
   AlignmentMask = 31;
 {$else}
-{$ifdef Align16Bytes}
+  {$ifdef Align16Bytes}
   AlignmentMask = 15;
-{$else}
+  {$else}
   AlignmentMask = 7;
-{$endif}
-{$endif}
+  {$endif}
+{$endif Align32Bytes}
+{$endif DEBUG}
 
+  {The number of small block types}
 {$ifdef Align32Bytes}
   NumSmallBlockTypes = 44;
 {$else}
