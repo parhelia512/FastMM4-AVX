@@ -2333,8 +2333,8 @@ const
    small block pool.}
   MinimumSmallBlocksPerPool = 12;
   {The lower and upper limits for the optimal small block pool size}
-  OptimalSmallBlockPoolSizeLowerLimit = 29 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
-  OptimalSmallBlockPoolSizeUpperLimit = 64 * 1024 - MediumBlockGranularity + MediumBlockSizeOffset;
+  OptimalSmallBlockPoolSizeLowerLimit = 29 * 1024 - Cardinal(MediumBlockGranularity) + MediumBlockSizeOffset;
+  OptimalSmallBlockPoolSizeUpperLimit = 64 * 1024 - Cardinal(MediumBlockGranularity) + MediumBlockSizeOffset;
   {The maximum small block pool size. If a free block is this size or larger
    then it will be split.}
   MaximumSmallBlockPoolSize = OptimalSmallBlockPoolSizeUpperLimit + MinimumMediumBlockSize;
@@ -6305,7 +6305,7 @@ const
   cRoundErmsBlockSizeBoundary = (1 shl cRoundErmsBlockSizeBits);
   cRoundErmsBlockSizeMask     = cRoundErmsBlockSizeBoundary-1;
 
-  cRepMovsSmallBlock = cRoundErmsBlockSizeBoundary * 3;
+  cRepMovsSmallBlock = Cardinal(cRoundErmsBlockSizeBoundary) * 3;
 
 procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit} nostackframe; {$endif}
 asm
@@ -18741,7 +18741,9 @@ var
 {$endif}
 
 {$ifdef USE_CPUID}
+{$ifdef EnableAVX}
   CpuXCR0: Int64;
+{$endif}
   MaxInputValueBasic: Cardinal;
   LReg0, LReg1, LReg7_0: TCpuIdRegisters;
 {$endif}
@@ -18927,6 +18929,8 @@ This is because the operating system would not save the registers and the states
 2) Issue XGETBV and verify that XCR0[2:1] = '11b' (XMM state and YMM state are enabled by OS).
 3) detect CPUID.1:ECX.AVX[bit 28] = 1 (AVX instructions supported).
 ENDQUOTE}
+
+      {$ifdef EnableAVX}
       if
         ((LReg1.RegECX and (UnsignedBit shl 27)) <> 0) {OSXSAVE bit} then
       begin
@@ -18935,6 +18939,7 @@ ENDQUOTE}
       begin
         CpuXCR0 := 0;
       end;
+      {$endif}
 
       {$ifdef EnableAVX}
       if
