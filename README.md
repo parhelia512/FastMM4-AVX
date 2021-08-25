@@ -6,7 +6,7 @@ FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support fo
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.06
+Version 1.0.6
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.993 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -262,7 +262,7 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
-- 1.06 (24 May 2021) - it can now be compiled with any alignment (8, 16, 32)
+- 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
     or not; the "PurePascal" conditional define to disable inline assembly at
     all, however, in this case, efficient locking would not work since it
