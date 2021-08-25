@@ -8,7 +8,7 @@ Written by Maxim Masiutin <maxim@masiutin.com>
 
 Version 1.06
 
-This is a fork of the "Fast Memory Manager" (FastMM) v4.992 by Pierre le Riche
+This is a fork of the "Fast Memory Manager" (FastMM) v4.993 by Pierre le Riche
 (see below for the original FastMM4 description)
 
 What was added to FastMM4-AVX in comparison to the original FastMM4:
