@@ -25,10 +25,6 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      # Runs a first command 
-      - name: Run a first command
-        run: pwd
+      - name: Compile a simple demo
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -MObjFPC SimpleTest.dpr
 
-      # Runs a second command 
-      - name: Run a second command
-        run: echo $GITHUB_WORKSPACE
