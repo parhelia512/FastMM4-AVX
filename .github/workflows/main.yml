@@ -15,8 +15,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
+  build_linux:
     # The type of runner that the job will run on
     runs-on: self-hosted
 
@@ -32,3 +31,16 @@ jobs:
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -Mdelphi SimpleTest.dpr
 
 
+  build_windows:
+    # The type of runner that the job will run on
+    runs-on: self-hosted-windows
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - name: Compile a simple demo 
+        run: |
+          cd %GITHUB_WORKSPACE%/Tests/Simple
+          dir
