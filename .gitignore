@@ -56,3 +56,8 @@ __history/
 
 # Castalia statistics file
 *.stat
+
+# FreePascal object files
+FastMM4.o
+FastMM4.ppu
+FastMM4Messages.ppu
