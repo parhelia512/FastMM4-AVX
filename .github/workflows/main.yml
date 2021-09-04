@@ -43,4 +43,4 @@ jobs:
       - name: Compile a simple demo 
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          C:\Delphi2007\Main\bin\DCC32.EXE -B -U../.. SimpleTestNoRelative.dpr
+          & 'C:\Delphi2007\Main\bin\DCC32.EXE' @('-B', '-U../..', 'SimpleTestNoRelative.dpr')
