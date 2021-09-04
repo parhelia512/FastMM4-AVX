@@ -26,9 +26,9 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Compile a simple demo in ObjFPC mode
-        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -MObjFPC SimpleTest.dpr
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC SimpleTest.dpr
 
       - name: Compile a simple demo in Delphi mode
-        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -Mdelphi SimpleTest.dpr
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -Mdelphi SimpleTest.dpr
 
 
