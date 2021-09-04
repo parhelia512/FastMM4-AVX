@@ -25,6 +25,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      - name: Compile a simple demo
+      - name: Compile a simple demo in ObjFPC mode
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -MObjFPC SimpleTest.dpr
+
+      - name: Compile a simple demo in Delphi mode
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -Mdelphi SimpleTest.dpr
+
 
