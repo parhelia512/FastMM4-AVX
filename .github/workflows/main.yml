@@ -1,27 +1,28 @@
-# This is a basic workflow to help you get started with Actions
+name: Build
 
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches: 
+      - master
+    paths:
+      - FastMM4.pas
+      - FastMM4Messages.pas
+      - FastMM4Options.inc
   pull_request:
-    branches: [ master ]
+    branches: 
+      - master
+    paths:
+      - FastMM4.pas
+      - FastMM4Messages.pas
+      - FastMM4Options.inc
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build_linux:
-    # The type of runner that the job will run on
-    runs-on: self-hosted
+    runs-on: self-hosted-linux
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
       - name: Compile a simple demo in ObjFPC mode
@@ -30,9 +31,14 @@ jobs:
       - name: Compile a simple demo in Delphi mode
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -Mdelphi SimpleTest.dpr
 
+      - name: Compile with various defined options
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -DAlign16Bytes SimpleTest.dpr
+          fpc -B -Mdelphi -DAlign32Bytes SimpleTest.dpr
+
 
   build_windows:
-    # The type of runner that the job will run on
     runs-on: self-hosted-windows
 
     # Steps represent a sequence of tasks that will be executed as part of the job

@@ -1171,6 +1171,53 @@ interface
 
 {$Include FastMM4Options.inc}
 
+{Defines to turn off options enabled by default}
+
+{$ifdef DontDetectMMOperationsAfterUninstall}
+  {$undef DetectMMOperationsAfterUninstall}
+{$endif}
+
+{$ifdef DiablePasCodeAlign}
+  {$undef PasCodeAlign}
+{$endif}
+
+{$ifdef DisableAsmCodeAlign}
+  {$undef EnableAsmCodeAlign}
+  {$undef ForceAsmCodeAlign}
+{$endif}
+
+{$ifdef DontUseASMVersion}
+  {$undef UseASMVersion}
+{$endif}
+
+{$ifdef DontUseSmallBlocksLockedCriticalSection}
+  {$undef UseSmallBlocksLockedCriticalSection}
+{$endif}
+
+{$ifdef DontUseMediumBlocksLockedCriticalSection
+  {$undef UseMediumBlocksLockedCriticalSection}
+{$endif}
+
+{$ifdef DontUseLargeBlocksLockedCriticalSection
+  {$undef UseLargeBlocksLockedCriticalSection}
+{$endif}
+
+{$ifdef DontUseSimplifiedInterlockedExchangeByte}
+  {$undef UseSimplifiedInterlockedExchangeByte}
+{$endif}
+
+{$ifdef DontUseCustomFixedSizeMoveRoutines}
+  {$undef UseCustomFixedSizeMoveRoutines}
+{$endif}
+
+{$ifdef DontUseCustomVariableSizeMoveRoutines}
+  {$undef UseCustomVariableSizeMoveRoutines}
+{$endif}
+
+{$ifdef ForceSingleThreaded}
+  {$undef AssumeMultiThreaded}
+{$endif}
+
 {Compiler version defines}
 {$ifndef fpc}
   {$ifndef BCB}
@@ -18592,8 +18639,10 @@ function CheckCanInstallMemoryManager: Boolean;
 var
   LErrorMessageTitle: array[0..MaxDisplayMessageLength-1] of AnsiChar;
 {$endif}
+{$ifndef POSIX}
 var
   HeapTotalAllocated: NativeUInt;
+{$endif}
 begin
   {Default to error}
   Result := False;

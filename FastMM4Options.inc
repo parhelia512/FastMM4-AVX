@@ -32,7 +32,8 @@ Set the default options for FastMM here.
 {Enable to use faster fixed-size move routines when upsizing small blocks.
  These routines are much faster than the Borland RTL move procedure since they
  are optimized to move a fixed number of bytes. This option may be used
- together with the FastMove library for even better performance.}
+ together with the FastMove library for even better performance.
+ You may define "DontUseCustomFixedSizeMoveRoutines" to undef this option}
 
 {$define UseCustomFixedSizeMoveRoutines}
 
@@ -42,7 +43,8 @@ Set the default options for FastMM here.
  ("FastMove") library. Using the Fastcode move library allows your whole
  application to gain from faster move routines, not just the memory manager. It
  is thus recommended that you use the Fastcode move library in conjunction with
- this memory manager and disable this option.}
+ this memory manager and disable this option.
+ You may define "DontUseCustomVariableSizeMoveRoutines" to undef this option.}
 
 {$define UseCustomVariableSizeMoveRoutines}
 
@@ -87,7 +89,8 @@ Set the default options for FastMM here.
  multi-threaded DLL. Since the primary goal of FastMM4-AVX is improvement in
  multi-threaded applications, this option is enabled by default. However, if you
  know for sure that your application is Single-Threaded, undefine this to improve
- performance - this will save yo from unnecessary locking! }
+ performance - this will save yo from unnecessary locking!
+ You can define "ForceSingleThreaded" to undefine "AssumeMultiThreaded"}
 
 {$define AssumeMultiThreaded}
 
@@ -150,14 +153,14 @@ MediumBlocksLockedCriticalSection/LargeBlocksLockedCriticalSection is enabled}
 {.$define UseSwitchToThread}
 
 
-{This option uses a simpler instruction to acquire a lock: "lock xchg",
-instead of "lock cmpxchg" used in earlier versions of FastMM4: there is
-actually no reason to use "cmpxchg", because  the simple instruction - "xchg" -
-perfectly suits our need. Although "xchg" has exactly the same latency and
-costs in terms of CPU cycles as "cmpxghg", it is just simper way to do the
-lock that we need, and, according to the Occam's razor principle, simple things
-are better. If you wish to restore old functionality of FastMM4 version 4.992,
-disable this option }
+{This option uses a simpler instruction to acquire a lock: "lock xchg", instead
+of "lock cmpxchg" used in earlier versions of FastMM4: there is actually no
+reason to use "cmpxchg", because  the simple instruction - "xchg" - perfectly
+suits our need. Although "xchg" has exactly the same latency and costs in terms
+of CPU cycles as "cmpxghg", it is just simper way to do the lock that we need,
+and, according to the Occam's razor principle, simple things are better. If you
+wish to restore old functionality of FastMM4 version 4.992, disable this option,
+e.g. by defining "DontUseSimplifiedInterlockedExchangeByte" }
 
 {$define SimplifiedInterlockedExchangeByte}
 
@@ -187,7 +190,13 @@ SwitchToThread() instead of critical sections; If a CPU doesn't have the
 function, it will use EnterCriticalSection/LeaveCriticalSection.
 
 If you wound not define the 3 options below, you will get the locking
-mechanism from the original FastMM4}
+mechanism from the original FastMM4.
+
+Since these options are defined by default, you may define
+DontUseSmallBlocksLockedCriticalSection,
+DontUseMediumBlocksLockedCriticalSection and
+DontUseLargeBlocksLockedCriticalSection, respectively, to undefine these
+options }
 
 {$define SmallBlocksLockedCriticalSection}
 {$define MediumBlocksLockedCriticalSection}
@@ -229,7 +238,8 @@ at the beginning of the main .pas file for the discussion }
 
 {Set this option to use the assembly language version of GetMem and FreeMem
  which is faster than the pascal version. Disable only for debugging purposes.
- Setting the CheckHeapForCorruption option automatically disables this option.}
+ Setting the CheckHeapForCorruption option automatically disables this option.
+ You may also define DontUseASMVersion to disable this option. }
 
 {$define ASMVersion}
 
@@ -247,14 +257,17 @@ be able to use efficient locking without inline assembly.}
  predicions. So for Embarcadero (former Borland) 32-bit or 64-bit
  Delphi, EnableAsmCodeAlign will have no effect. However, undre FreePascal
  it turns on using the ".align". To force using it under Delphi, define
- "ForceAsmCodeAlign" }
+ "ForceAsmCodeAlign".
+
+ To disable this option, define "DisableAsmCodeAlign",
+ which affects both "EnableAsmCodeAlign" and "ForceAsmCodeAlign" }
 
 
 {$define EnableAsmCodeAlign}
 {.$define ForceAsmCodeAlign}
 
 
-{Allow pascal code alignment}
+{Allow pascal code alignment, use "DisablePasCodeAlign" to disable this option}
 
 {$define PasCodeAlign}
 
@@ -272,7 +285,8 @@ be able to use efficient locking without inline assembly.}
  been uninstalled. With this option set when FastMM is uninstalled it will not
  install the previous MM, but instead a dummy MM handler that throws an error
  if any MM operation is attempted. This will catch attempts to use the MM
- after FastMM has been uninstalled.}
+ after FastMM has been uninstalled.
+ You may define "DontDetectMMOperationsAfterUninstall" to disable this option}
 
 {$define DetectMMOperationsAfterUninstall}
 
