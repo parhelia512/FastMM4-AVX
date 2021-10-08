@@ -1194,11 +1194,11 @@ interface
   {$undef UseSmallBlocksLockedCriticalSection}
 {$endif}
 
-{$ifdef DontUseMediumBlocksLockedCriticalSection
+{$ifdef DontUseMediumBlocksLockedCriticalSection}
   {$undef UseMediumBlocksLockedCriticalSection}
 {$endif}
 
-{$ifdef DontUseLargeBlocksLockedCriticalSection
+{$ifdef DontUseLargeBlocksLockedCriticalSection}
   {$undef UseLargeBlocksLockedCriticalSection}
 {$endif}
 
