@@ -36,6 +36,15 @@ jobs:
           cd $GITHUB_WORKSPACE/Tests/Simple
           fpc -B -Mdelphi -dAlign16Bytes SimpleTest.dpr
           fpc -B -Mdelphi -dAlign32Bytes SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
+          fpc -B -Mdelphi -dForceSingleThreaded SimpleTest.dpr
+          fpc -B -Mdelphi -dDisablePauseAndSwitchToThread SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -dDontUseASMVersion SimpleTest.dpr
+          fpc -B -Mdelphi -dDisableAsmCodeAlign SimpleTest.dpr
 
 
   build_windows:
