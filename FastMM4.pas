@@ -11943,8 +11943,7 @@ asm
 {$ifndef AssumeMultiThreaded}
   test r12b, (UnsignedBit shl StateBitMultithreaded)
   jnz @LockSmallBlockType // test+jnz are together to allow macro-op fusion
-  call @FreememMain
-  jmp @Done
+  jmp @AfterLockOnSmallBlockType
 {$else}
   jmp @LockSmallBlockType
 {$endif}
