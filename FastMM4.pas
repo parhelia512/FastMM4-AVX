@@ -6866,6 +6866,7 @@ end;
 {Returns the current thread ID}
 function GetThreadID: Cardinal;
 {$ifdef WIN32}
+assembler;
 asm
   mov eax, FS:[$24]
 end;
@@ -16033,7 +16034,8 @@ begin
     LMsgPtr := AppendStringToBuffer(VirtualMethodName, LMsgPtr, Length(VirtualMethodName), LInitialSize-NativeUint(LMsgPtr-LInitialPtr));
     if LVMOffset < 0 then
     begin
-      LMsgPtr := AppendStringToBuffer(StandardVirtualMethodNames[LVMOffset div SizeOf(Pointer)], LMsgPtr, Length(StandardVirtualMethodNames[LVMOffset div SizeOf(Pointer)]), LInitialSize-NativeUint(LMsgPtr-LInitialPtr));
+      LVMIndex := LVMOffset div SizeOf(Pointer);
+      LMsgPtr := AppendStringToBuffer(StandardVirtualMethodNames[LVMIndex], LMsgPtr, Length(StandardVirtualMethodNames[LVMIndex]), LInitialSize-NativeUint(LMsgPtr-LInitialPtr));
     end
     else
     begin

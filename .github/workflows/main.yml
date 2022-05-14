@@ -8,13 +8,6 @@ on:
       - FastMM4.pas
       - FastMM4Messages.pas
       - FastMM4Options.inc
-  pull_request:
-    branches: 
-      - master
-    paths:
-      - FastMM4.pas
-      - FastMM4Messages.pas
-      - FastMM4Options.inc
 
   workflow_dispatch:
 
