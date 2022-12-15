@@ -27,17 +27,20 @@ jobs:
       - name: Compile with various defined options
         run: |
           cd $GITHUB_WORKSPACE/Tests/Simple
-          fpc -B -Mdelphi -dAlign16Bytes SimpleTest.dpr
-          fpc -B -Mdelphi -dAlign32Bytes SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
-          fpc -B -Mdelphi -dForceSingleThreaded SimpleTest.dpr
-          fpc -B -Mdelphi -dDisablePauseAndSwitchToThread SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -dDontUseASMVersion SimpleTest.dpr
-          fpc -B -Mdelphi -dDisableAsmCodeAlign SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dFullDebugMode SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign16Bytes SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign32Bytes SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dForceSingleThreaded SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisablePauseAndSwitchToThread SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseASMVersion SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisableAsmCodeAlign SimpleTest.dpr
 
 
   build_windows:

@@ -14337,6 +14337,7 @@ begin
   OutputDebugStringA(InvalidGetMemMsg);
 {$endif}
 {$ifndef NoMessageBoxes}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(InvalidOperationTitle, LErrorMessageTitle, Length(InvalidOperationTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0])-1));
   ShowMessageBox(InvalidGetMemMsg, LErrorMessageTitle);
 {$endif}
@@ -14353,6 +14354,7 @@ begin
   OutputDebugStringA(InvalidFreeMemMsg);
 {$endif}
 {$ifndef NoMessageBoxes}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(InvalidOperationTitle, LErrorMessageTitle, Length(InvalidOperationTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0])-1));
   ShowMessageBox(InvalidFreeMemMsg, LErrorMessageTitle);
 {$endif}
@@ -14369,6 +14371,7 @@ begin
   OutputDebugStringA(InvalidReallocMemMsg);
 {$endif}
 {$ifndef NoMessageBoxes}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(InvalidOperationTitle, LErrorMessageTitle, Length(InvalidOperationTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0])-1));
   ShowMessageBox(InvalidReallocMemMsg, LErrorMessageTitle);
 {$endif}
@@ -14385,6 +14388,7 @@ begin
   OutputDebugStringA(InvalidAllocMemMsg);
 {$endif}
 {$ifndef NoMessageBoxes}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(InvalidOperationTitle, LErrorMessageTitle, Length(InvalidOperationTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
   ShowMessageBox(InvalidAllocMemMsg, LErrorMessageTitle);
 {$endif}
@@ -15277,6 +15281,7 @@ begin
 {$endif}
   {Show the message}
 {$ifndef NoMessageBoxes}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(BlockErrorMsgTitle, LErrorMessageTitle, Length(BlockErrorMsgTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
   ShowMessageBox(LErrorMessage, LErrorMessageTitle);
 {$endif}
@@ -15994,7 +15999,7 @@ end;
 
 procedure TFreedObject.VirtualMethodError;
 var
-  LVMOffset: Integer;
+  LVMOffset, LVMIndex: Integer;
   LInitialPtr, LMsgPtr: PAnsiChar;
   LErrorMessage: array[0..MaxLogMessageLength-1] of AnsiChar;
 {$ifndef NoMessageBoxes}
@@ -16101,6 +16106,7 @@ begin
 {$endif}
 {$ifndef NoMessageBoxes}
   {Show the message}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(BlockErrorMsgTitle, LErrorMessageTitle, Length(BlockErrorMsgTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
   ShowMessageBox(LErrorMessage, LErrorMessageTitle);
 {$endif}
@@ -16144,6 +16150,7 @@ begin
 {$endif}
 {$ifndef NoMessageBoxes}
   {Show the message}
+  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
   AppendStringToModuleName(BlockErrorMsgTitle, LErrorMessageTitle, Length(BlockErrorMsgTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
   ShowMessageBox(LErrorMessage, LErrorMessageTitle);
 {$endif}
@@ -17652,6 +17659,7 @@ begin
   {$endif}
   {$ifndef NoMessageBoxes}
       {Show the message}
+      FillChar(LMessageTitleBuffer, SizeOf(LMessageTitleBuffer), 0);
       AppendStringToModuleName(LeakMessageTitle, LMessageTitleBuffer, Length(LeakMessageTitle), (SizeOf(LMessageTitleBuffer) div SizeOf(LMessageTitleBuffer[0]))-1);
       ShowMessageBox(LLeakMessage, LMessageTitleBuffer);
   {$endif}
@@ -18297,6 +18305,7 @@ begin
       LMsgPtr := AppendStringToBuffer(CRLF, LMsgPtr, Length(CRLF), LInitialSize-NativeUInt(LMsgPtr-LInitialPtr));
     end;
 {$ifndef NoMessageBoxes}
+    FillChar(LMessageTitleBuffer, SizeOf(LMessageTitleBuffer), 0);
     AppendStringToModuleName(LockingReportTitle, LMessageTitleBuffer, Length(LockingReportTitle), (SizeOf(LMessageTitleBuffer) div SizeOf(LMessageTitleBuffer[0]))-1);
     ShowMessageBox(LErrorMessage, LMessageTitleBuffer);
 {$endif}
@@ -18665,6 +18674,7 @@ begin
     OutputDebugStringA(AlreadyInstalledMsg);
 {$endif}
 {$ifndef NoMessageBoxes}
+    FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
     AppendStringToModuleName(AlreadyInstalledTitle, LErrorMessageTitle, Length(AlreadyInstalledTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
     ShowMessageBox(AlreadyInstalledMsg, LErrorMessageTitle);
 {$endif}
@@ -18683,6 +18693,7 @@ begin
     OutputDebugStringA(OtherMMInstalledMsg);
   {$endif}
   {$ifndef NoMessageBoxes}
+    FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
     AppendStringToModuleName(OtherMMInstalledTitle, LErrorMessageTitle, Length(OtherMMInstalledTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
     ShowMessageBox(OtherMMInstalledMsg, LErrorMessageTitle);
   {$endif}
@@ -18711,6 +18722,7 @@ units). }
     OutputDebugStringA(MemoryAllocatedMsg);
 {$endif}
   {$ifndef NoMessageBoxes}
+    FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
     AppendStringToModuleName(MemoryAllocatedTitle, LErrorMessageTitle, Length(MemoryAllocatedTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0]))-1);
     {$ifdef FPC}
     ShowMessageBox('In FreePascal, we cannot rely on HeapTotalAllocated to check '+
@@ -20035,19 +20047,19 @@ begin
   {$endif}
   end;
   {$else 32bit}
-  if (NegNativeUintMaskBit(0) <> 0) or
-     (NegNativeUintMaskBit(1) <> $FFFFFFFFFFFFFFFF) or
-     (NegNativeUintMaskBit(2) <> $FFFFFFFFFFFFFFFE) or
-     (NegNativeUintMaskBit(3) <> $FFFFFFFFFFFFFFFD) or
-     (NegNativeUintMaskBit(4) <> $FFFFFFFFFFFFFFFC) or
-     (NegNativeUintMaskBit($7E) <> $FFFFFFFFFFFFFF82) or
-     (NegNativeUintMaskBit($7F) <> $FFFFFFFFFFFFFF81) or
-     (NegNativeUintMaskBit($80) <> $FFFFFFFFFFFFFF80) or
-     (NegNativeUintMaskBit($81) <> $FFFFFFFFFFFFFF7F) or
-     (NegNativeUintMaskBit($FE) <> $FFFFFFFFFFFFFF02) or
-     (NegNativeUintMaskBit($FF) <> $FFFFFFFFFFFFFF01) or
-     (NegNativeUintMaskBit($100) <> $FFFFFFFFFFFFFF00) or
-     (NegNativeUintMaskBit($101) <> $FFFFFFFFFFFFFEFF) then
+  if (NegNativeUintMaskBit(NativeUInt(0)) <> NativeUInt(0)) or
+     (NegNativeUintMaskBit(NativeUInt(1)) <> NativeUInt($FFFFFFFFFFFFFFFF)) or
+     (NegNativeUintMaskBit(NativeUInt(2)) <> NativeUInt($FFFFFFFFFFFFFFFE)) or
+     (NegNativeUintMaskBit(NativeUInt(3)) <> NativeUInt($FFFFFFFFFFFFFFFD)) or
+     (NegNativeUintMaskBit(NativeUInt(4)) <> NativeUInt($FFFFFFFFFFFFFFFC)) or
+     (NegNativeUintMaskBit(NativeUInt($7E)) <> NativeUInt($FFFFFFFFFFFFFF82)) or
+     (NegNativeUintMaskBit(NativeUInt($7F)) <> NativeUInt($FFFFFFFFFFFFFF81)) or
+     (NegNativeUintMaskBit(NativeUInt($80)) <> NativeUInt($FFFFFFFFFFFFFF80)) or
+     (NegNativeUintMaskBit(NativeUInt($81)) <> NativeUInt($FFFFFFFFFFFFFF7F)) or
+     (NegNativeUintMaskBit(NativeUInt($FE)) <> NativeUInt($FFFFFFFFFFFFFF02)) or
+     (NegNativeUintMaskBit(NativeUInt($FF)) <> NativeUInt($FFFFFFFFFFFFFF01)) or
+     (NegNativeUintMaskBit(NativeUInt($100)) <> NativeUInt($FFFFFFFFFFFFFF00)) or
+     (NegNativeUintMaskBit(NativeUInt($101)) <> NativeUInt($FFFFFFFFFFFFFEFF)) then
   begin
   {$ifdef BCB6OrDelphi7AndUp}
     System.Error(reInvalidPtr);
@@ -20056,13 +20068,13 @@ begin
   {$endif}
   end;
   if
-     (NegNativeUintMaskBit($7FFFFFFF) <> $FFFFFFFF80000001) or
-     (NegNativeUintMaskBit($80000000) <> $FFFFFFFF80000000) or
-     (NegNativeUintMaskBit($80000001) <> $FFFFFFFF7FFFFFFF) or
-     (NegNativeUintMaskBit($FFFFFFFF) <> $FFFFFFFF00000001) or
-     (NegNativeUintMaskBit($FFFFFFFE) <> $FFFFFFFF00000002) or
-     (NegNativeUintMaskBit($FFFFFFFFFFFFFFFF) <> 1) or
-     (NegNativeUintMaskBit($FFFFFFFFFFFFFFFE) <> 2) then
+     (NegNativeUintMaskBit(NativeUInt($7FFFFFFF)) <> NativeUInt($FFFFFFFF80000001)) or
+     (NegNativeUintMaskBit(NativeUInt($80000000)) <> NativeUInt($FFFFFFFF80000000)) or
+     (NegNativeUintMaskBit(NativeUInt($80000001)) <> NativeUInt($FFFFFFFF7FFFFFFF)) or
+     (NegNativeUintMaskBit(NativeUInt($FFFFFFFF)) <> NativeUInt($FFFFFFFF00000001)) or
+     (NegNativeUintMaskBit(NativeUInt($FFFFFFFE)) <> NativeUInt($FFFFFFFF00000002)) or
+     (NegNativeUintMaskBit(NativeUInt($FFFFFFFFFFFFFFFF)) <> NativeUInt(1)) or
+     (NegNativeUintMaskBit(NativeUInt($FFFFFFFFFFFFFFFE)) <> NativeUInt(2)) then
   begin
   {$ifdef BCB6OrDelphi7AndUp}
     System.Error(reInvalidPtr);
