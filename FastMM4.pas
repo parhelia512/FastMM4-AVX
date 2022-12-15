@@ -2191,7 +2191,9 @@ uses
     {$ifdef Delphi4or5}
   ShlObj,
     {$else}
-  SHFolder,
+      {$ifndef FPC}
+      SHFolder,
+      {$endif}
     {$endif}
   {$endif}
 {$else}
@@ -2205,6 +2207,18 @@ uses
     {$endif}
   {$endif}
 {$endif}
+
+{$ifdef LogLockContention}
+  {$ifdef FPC}
+    {$undef LogLockContention}
+    {$message error 'LogLockContention is not supported under FPC'}
+  {$endif}
+  {$ifndef XE2AndUp}
+    {$undef LogLockContention}
+    Error: LogLockContention requires Delphi XE2 or later!!!
+  {$endif}
+{$endif}
+
 {$ifdef LogLockContention}
   FastMM4DataCollector,
 {$endif}
