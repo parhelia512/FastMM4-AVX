@@ -8725,10 +8725,10 @@ end;
 function NegByteMaskBit(A: Byte): Byte;
 {$ifndef ASMVersion}
 begin
-{$ifdef Delphi4or5}
-  Result := Byte((0-ShortInt(A)));
-{$else}
+{$ifdef XE2AndUp}
   Result := Byte((0-System.Int8(A)));
+{$else}
+  Result := Byte((0-ShortInt(A)));
 {$endif}
 end;
 {$else}
