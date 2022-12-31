@@ -18857,7 +18857,11 @@ begin
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
   {$ifdef FPC}
-     Pointer(FSwitchToThread)
+     {$ifdef 32bit}
+       FSwitchToThread
+     {$else}
+       Pointer(FSwitchToThread)
+     {$endif}
   {$else}
      FSwitchToThread
   {$endif}
