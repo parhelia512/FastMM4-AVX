@@ -173,9 +173,9 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple 
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisablePauseAndSwitchToThread', '-O4', 'SimpleTest.dpr')
 
-      - name: Compile by FreePascal 32-bit with 
+      - name: Compile by FreePascal 32-bit with -dDontUseSmallBlocksLockedCriticalSection
         run: |
-          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dDontUseSmallBlocksLockedCriticalSection
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseSmallBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDontUseMediumBlocksLockedCriticalSection 
