@@ -14597,7 +14597,7 @@ var
   LEnvVarLength, LModuleNameLength: Cardinal;
   LPathOverride: array[0..MaxFileNameLengthDouble-1] of AnsiChar;
   LPFileName: PAnsiChar;
-  LFileNameLength: Integer;
+  LFileNameLength: NativeInt;
 begin
   {Get the name of the application}
   LModuleNameLength := AppendModuleFileName(@(MMLogFileName[0]), SizeOf(MMLogFileName));
