@@ -18847,12 +18847,7 @@ begin
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
-  {$ifdef FPC}
-  Pointer(FSwitchToThread)
-  {$else}
-  FSwitchToThread
-  {$endif}
-  := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+  FSwitchToThread := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
 {$endif}
 {$endif}
 
