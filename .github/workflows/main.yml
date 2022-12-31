@@ -73,7 +73,7 @@ jobs:
 
       - name: Compile by FreePascal 32-bit with various defined options
         run: |
-          cd $GITHUB_WORKSPACE/Tests/Simple
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDisableAsmCodeAlign SimpleTest.dpr
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDEBUG -g SimpleTest.dpr
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
@@ -91,7 +91,7 @@ jobs:
 
       - name: Compile by FreePascal 64-bit with various defined options
         run: |
-          cd $GITHUB_WORKSPACE/Tests/Simple
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDisableAsmCodeAlign SimpleTest.dpr
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDEBUG -g SimpleTest.dpr
           & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
