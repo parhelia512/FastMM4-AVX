@@ -568,6 +568,10 @@ Combine it with the two options below for further fine-tuning.}
 
 {$endif}
 
+{$ifndef DisableWAITPKG}
+  {$define EnableWAITPKG}
+{$endif}
+
 {-----------------------Memory Manager Sharing Options------------------------}
 
 {Allow sharing of the memory manager between a main application and DLLs that

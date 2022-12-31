@@ -2182,6 +2182,8 @@ var
 {$endif}
 {$endif}
 
+function GetFastMMCpuFeatures: Word;
+
 implementation
 
 uses
@@ -2876,6 +2878,12 @@ const
   FastMMCpuFeatureFSRM                          = Byte(UnsignedBit shl 7);
 {$endif}
 
+{$ifdef EnableWAITPKG}
+  {WAITPKG (UMONITOR/UMWAIT) }
+  FastMMCpuFeatureB_WAITPKG                     = Byte(UnsignedBit shl 0);
+{$endif}
+
+
 {-------------------------Private variables----------------------------}
 var
   {-----------------Small block management------------------}
@@ -3213,7 +3221,8 @@ var
   {See FastMMCpuFeature... constants.
   We have packe the most interesting CPUID bits in one byte for faster comparison
   These features are mostly used for faster memory move operations}
-  FastMMCpuFeatures: Byte;
+  FastMMCpuFeaturesA: Byte;
+  FastMMCpuFeaturesB: Byte;
 {$endif}
 
   {Is a MessageBox currently showing? If so, do not show another one.}
@@ -5883,7 +5892,7 @@ procedure MoveWithErmsNoAVX(const ASource; var ADest; ACount: NativeInt); forwar
 procedure MoveX16LP(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit}  nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
-  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  test FastMMCpuFeaturesA, FastMMCpuFeatureERMS
   jz @NoERMS
   call MoveWithErmsNoAVX
   jmp  @Finish
@@ -5894,7 +5903,7 @@ asm
   add edx, ecx
 {$ifdef EnableMMX}
   {$ifndef ForceMMX}
-  test FastMMCpuFeatures, FastMMCpuFeatureMMX
+  test FastMMCpuFeaturesA, FastMMCpuFeatureMMX
   jz @FPUMove
   {$endif}
   {Make the counter negative based: The last 12 bytes are moved separately}
@@ -5975,7 +5984,7 @@ asm
   {$ifdef AllowAsmNoframe}
   .noframe
   {$endif}
-  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  test FastMMCpuFeaturesA, FastMMCpuFeatureERMS
   jz @NoERMS
   call MoveWithErmsNoAVX
   jmp @Finish
@@ -6434,7 +6443,7 @@ asm
   cmp     ecx, 32
   jb      @below32left
 
-  test    FastMMCpuFeatures, FastMMCpuFeatureSSE
+  test    FastMMCpuFeaturesA, FastMMCpuFeatureSSE
   jz      @NoSSE // no SSE
 
   sub     ecx, 32
@@ -6576,7 +6585,7 @@ asm
 {$ifdef EnableFSRM}
   // moves of 64 bytes or less are good only when we have fast short strings on 64 bit,
   // but not on 32 bit
-  test    FastMMCpuFeatures, FastMMCpuFeatureFSRM
+  test    FastMMCpuFeaturesA, FastMMCpuFeatureFSRM
   jnz     @movs
 {$endif}
 {$endif}
@@ -6632,7 +6641,7 @@ var
   F: Byte;
 begin
 {$ifdef USE_CPUID}
-  F := FastMMCpuFeatures;
+  F := FastMMCpuFeaturesA;
 {$ifdef EnableFSRM}
   if F and FastMMCpuFeatureFSRM <> 0 then
   begin
@@ -6700,7 +6709,7 @@ end;
 procedure MoveX8LP(const ASource; var ADest; ACount: NativeInt); assembler; {$ifdef fpc64bit}  nostackframe; {$endif}
 asm
 {$ifdef 32Bit}
-  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  test FastMMCpuFeaturesA, FastMMCpuFeatureERMS
   jz @NoERMS
   call MoveWithErmsNoAVX
   jmp @Finish
@@ -6715,7 +6724,7 @@ asm
   neg ecx
 {$ifdef EnableMMX}
   {$ifndef ForceMMX}
-  test FastMMCpuFeatures, FastMMCpuFeatureMMX
+  test FastMMCpuFeaturesA, FastMMCpuFeatureMMX
   jz @FPUMoveLoop
   {$endif}
 
@@ -7603,7 +7612,7 @@ const
 function CpuFeaturePauseAndSwitch: Boolean; {$ifdef FASTMM4_ALLOW_INLINES}inline;{$endif}
 begin
   {$ifdef USE_CPUID}
-  Result := FastMMCpuFeatures and FastMMCpuFeaturePauseAndSwitch <> 0
+  Result := FastMMCpuFeaturesA and FastMMCpuFeaturePauseAndSwitch <> 0
   {$else}
   Result := False;
   {$endif}
@@ -8892,7 +8901,7 @@ function FastGetMem(ASize: {$ifdef XE2AndUp}NativeInt{$else}{$ifdef fpc}NativeUI
 {$ifdef CheckPauseAndSwitchToThreadForAsmVersion}
 assembler;
 asm
-  test FastMMCpuFeatures, FastMMCpuFeaturePauseAndSwitch
+  test FastMMCpuFeaturesA, FastMMCpuFeaturePauseAndSwitch
   jz @CallFastGetMemPascal
   call FastGetMemAssembler
   jmp @Finish
@@ -14196,7 +14205,7 @@ asm
   jae @Done
 
 
-  test FastMMCpuFeatures, FastMMCpuFeatureERMS
+  test FastMMCpuFeaturesA, FastMMCpuFeatureERMS
   jz @NoERMS
 
   push edi
@@ -18847,7 +18856,13 @@ begin
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
-  FSwitchToThread := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+  {$ifdef FPC}
+     Pointer(FSwitchToThread)
+  {$else}
+     FSwitchToThread
+  {$endif}
+
+  := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
 {$endif}
 {$endif}
 
@@ -18962,7 +18977,7 @@ This is because the operating system would not save the registers and the states
         {$endif}
         begin
           {$ifndef AssumePauseAndSwitchToThreadAvailable}
-          FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeaturePauseAndSwitch;
+          FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeaturePauseAndSwitch;
           {$endif DisablePauseAndSwitchToThread}
         end;
         {$endif}
@@ -18976,7 +18991,7 @@ This is because the operating system would not save the registers and the states
 {$endif}
       then
       begin
-        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureMMX;
+        FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureMMX;
       end;
 {$endif EnableMMX}
 
@@ -18989,7 +19004,7 @@ This is because the operating system would not save the registers and the states
       then
       begin
   {$ifdef 32bit_SSE}
-        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureSSE;
+        FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureSSE;
   {$endif}
       end;
 {$endif 32bit}
@@ -19026,17 +19041,17 @@ ENDQUOTE}
 
       then
       begin
-        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureAVX1;
+        FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureAVX1;
       end;
 
-      if (FastMMCpuFeatures and FastMMCpuFeatureAVX1 <> 0) then
+      if (FastMMCpuFeaturesA and FastMMCpuFeatureAVX1 <> 0) then
       begin
       { Application Software must identify that hardware supports AVX, after that it must also detect support for AVX2 by
         checking CPUID.(EAX=07H, ECX=0H):EBX.AVX2[bit 5].}
         if (MaxInputValueBasic > 7) and
             ((LReg7_0.RegEBX and (UnsignedBit shl 5))<> 0) then
         begin
-          FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureAVX2;
+          FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureAVX2;
 
           // check for AVX-512
         {$ifdef EnableAVX512}
@@ -19049,7 +19064,7 @@ ENDQUOTE}
         {$endif}
           then
           begin
-            FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureAVX512;
+            FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureAVX512;
           end;
         {$endif}
 
@@ -19062,7 +19077,7 @@ ENDQUOTE}
 {EBX: Bit 09: Supports Enhanced REP MOVSB/STOSB if 1.}
       ((LReg7_0.RegEBX and (UnsignedBit shl 9))<> 0) then
       begin
-        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureERMS;
+        FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureERMS;
       end;
       {$endif EnableERMS}
 
@@ -19071,9 +19086,19 @@ ENDQUOTE}
 {EDX: Bit 04: Supports Fast Short REP MOVSB if 1.}
       ((LReg7_0.RegEDX and (UnsignedBit shl 4)) <> 0) then
       begin
-        FastMMCpuFeatures := FastMMCpuFeatures or FastMMCpuFeatureFSRM;
+        FastMMCpuFeaturesA := FastMMCpuFeaturesA or FastMMCpuFeatureFSRM;
       end;
       {$endif}
+
+      {$ifdef EnableWAITPKG}
+      if (MaxInputValueBasic > 7) and
+{ECX: Bit 05: WAITPKG (supports UMONITOR/UMWAIT)}
+      ((LReg7_0.RegECX and (UnsignedBit shl 5)) <> 0) then
+      begin
+        FastMMCpuFeaturesB := FastMMCpuFeaturesB or FastMMCpuFeatureB_WaitPKG;
+      end;
+      {$endif}
+
     end;
 
   end;
@@ -19118,7 +19143,7 @@ ENDQUOTE}
     {$ifdef USE_CPUID}
     // if we have SSE, use SSE copy
     // even if we have Fast Short REP MOVSB, it is not as fast for sizes below 92 bytes under 32-bit
-    if ((FastMMCpuFeatures and FastMMCpuFeatureSSE) <> 0) then
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureSSE) <> 0) then
     begin
       case SmallBlockTypes[LInd].BlockSize of
         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}Move20_32bit_SSE;
@@ -19175,7 +19200,7 @@ ENDQUOTE}
     {$ifdef 64bit}
     {$ifdef EnableFSRM}
     {$ifdef USE_CPUID}
-    if (FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0 then
+    if (FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) <> 0 then
     begin
       // don't use any register copy if we have Fast Short REP MOVSB
       // Fast Short REP MOVSB is very fast under 64-bit
@@ -19210,8 +19235,8 @@ ENDQUOTE}
 
   {$ifdef EnableAVX512}
     // if we have AVX-512 but don't have FSRM
-    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0)
-        {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX512) <> 0)
+        {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
@@ -19231,8 +19256,8 @@ ENDQUOTE}
   {$endif}
     {$ifndef DisableAVX2}
     // if we have AVX2 but don't have FSRM
-    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0)
-      {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX2) <> 0)
+      {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif}
     then
     begin
       case SmallBlockTypes[LInd].BlockSize of
@@ -19248,8 +19273,8 @@ ENDQUOTE}
     {$endif DisableAVX2}
     {$ifndef DisableAVX1}
     // if we have AVX1 but don't have FSRM
-    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0)
-      {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif}
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX1) <> 0)
+      {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif}
       then
     begin
       case SmallBlockTypes[LInd].BlockSize of
@@ -19274,13 +19299,13 @@ ENDQUOTE}
     {$ifdef Align32Bytes}
     {$ifdef EnableAVX}
       {We must check AVX1 bit before checking the AVX2 bit}
-    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX2) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX2) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
-      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
+      if ((FastMMCpuFeaturesA and FastMMCpuFeatureERMS) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif} then
       begin
       {$ifdef EnableAVX512}
       {$ifndef DisableMoveX32LpAvx512}
-        if ((FastMMCpuFeatures and FastMMCpuFeatureAVX512) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
+        if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX512) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif} then
         begin
           SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx512WithErms;
         end else
@@ -19294,15 +19319,15 @@ ENDQUOTE}
         SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX32LpAvx2NoErms;
       end;
     end else
-    if ((FastMMCpuFeatures and FastMMCpuFeatureAVX1) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) = 0){$endif} then
+    if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX1) <> 0) {$ifdef EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$endif} then
     begin
       SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveX32LpAvx1NoErms;
     end else
     {$endif EnableAVX}
     begin
       {$ifdef EnableERMS}
-      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0)
-        {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
+      if ((FastMMCpuFeaturesA and FastMMCpuFeatureERMS) <> 0)
+        {$ifdef EnableFSRM}or ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
         SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveWithErmsNoAVX;
@@ -19315,8 +19340,8 @@ ENDQUOTE}
     {$else Align32Bytes}
       {$ifdef USE_CPUID}
       {$ifdef EnableERMS}
-      if ((FastMMCpuFeatures and FastMMCpuFeatureERMS) <> 0)
-         {$ifdef EnableFSRM}or ((FastMMCpuFeatures and FastMMCpuFeatureFSRM) <> 0){$endif}
+      if ((FastMMCpuFeaturesA and FastMMCpuFeatureERMS) <> 0)
+         {$ifdef EnableFSRM}or ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) <> 0){$endif}
       then
       begin
         SmallBlockTypes[LInd].UpsizeMoveProcedure := {$ifdef FPC}@{$endif}MoveWithErmsNoAVX;
@@ -20095,6 +20120,15 @@ begin
 end;
 {$endif}
 
+function GetFastMMCpuFeatures: Word;
+var
+  W: Word;
+begin
+  W := FastMMCpuFeaturesB;
+  Result := (W shl 8) or FastMMCpuFeaturesA;
+end;
+
+
 procedure RunInitializationCode;
 begin
   {Only run this code once during startup.}
@@ -20128,6 +20162,7 @@ begin
   end;
 {$endif}
 end;
+
 initialization
   RunInitializationCode;
 finalization
