@@ -14444,7 +14444,7 @@ begin
 end;
 
 {Finds the start and length of the file name given a full path.}
-procedure ExtractFileName(APFullPath: PAnsiChar; var APFileNameStart: PAnsiChar; var AFileNameLength: Integer);
+procedure ExtractFileName(APFullPath: PAnsiChar; var APFileNameStart: PAnsiChar; var AFileNameLength: NativeInt);
 var
   LChar: AnsiChar;
   LPFullPath: PAnsiChar;
@@ -14480,7 +14480,7 @@ var
   LBytesWritten: Cardinal;
   LEventHeader: array[0..MaxDisplayMessageLength-1] of AnsiChar;
   LAlternateLogFileName: array[0..MaxFileNameLengthDouble-1] of AnsiChar;
-  LPathLen, LNameLength: Integer;
+  LPathLen, LNameLength: NativeInt;
   LInitialPtr, LMsgPtr, LPFileName: PAnsiChar;
   LInitialSize: Cardinal;
   LSystemTime: TSystemTime;
