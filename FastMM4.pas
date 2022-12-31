@@ -6829,11 +6829,13 @@ const
   MB_ICONERROR = $10;
   MB_TASKMODAL = $2000;
   MB_DEFAULT_DESKTOP_ONLY = $20000;
+(*
   {Virtual memory constants}
   MEM_COMMIT = Windows.DWORD($1000);
   MEM_RELEASE = Windows.DWORD($8000);
   MEM_TOP_DOWN = Windows.DWORD($100000);
   PAGE_READWRITE = 4;
+*)
 
 procedure MessageBoxA(hWnd: Cardinal; AMessageText, AMessageTitle: PAnsiChar; uType: Cardinal); stdcall;
 begin
