@@ -94,6 +94,16 @@ jobs:
           cd $GITHUB_WORKSPACE/Tests/Simple
           fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseASMVersion -O4 SimpleTest.dpr
 
+      - name: Compile with -dDisableMemoryLeakReporting
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisableMemoryLeakReporting -O4 SimpleTest.dpr
+
+      - name: Compile with -dRequireIDEPresenceForLeakReporting
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dRequireIDEPresenceForLeakReporting -O4 SimpleTest.dpr
+
 
   build_windows:
     runs-on: self-hosted-windows
@@ -122,6 +132,11 @@ jobs:
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\Delphi2007\Main\bin\DCC32.EXE' @('-B', '-U../..', '-DFullDebugMode', '-$D-', 'SimpleTestNoRelative.dpr')
+
+      - name: Compile a simple demo with DisableMemoryLeakReporting 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\Delphi2007\Main\bin\DCC32.EXE' @('-B', '-U../..', '-DDisableMemoryLeakReporting', '-$D-', 'SimpleTestNoRelative.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
@@ -181,22 +196,32 @@ jobs:
       - name: Compile by FreePascal 32-bit with -dDontUseMediumBlocksLockedCriticalSection 
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseMediumBlocksLockedCriticalSection', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseMediumBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDontUseLargeBlocksLockedCriticalSection
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseLargeBlocksLockedCriticalSection', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseLargeBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDontUseASMVersion
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseASMVersion', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseASMVersion', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDisableMemoryLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisableMemoryLeakReporting', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dRequireIDEPresenceForLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 64-bit with -dDisableAsmCodeAlign
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableAsmCodeAlign', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableAsmCodeAlign', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 64-bit with -dDEBUG 
         run: |
@@ -251,15 +276,24 @@ jobs:
       - name: Compile by FreePascal 64-bit with -dDontUseMediumBlocksLockedCriticalSection 
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseMediumBlocksLockedCriticalSection', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseMediumBlocksLockedCriticalSection', '-O4','SimpleTest.dpr')
 
       - name: Compile by FreePascal 64-bit with -dDontUseLargeBlocksLockedCriticalSection
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseLargeBlocksLockedCriticalSection', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseLargeBlocksLockedCriticalSection', '-O4','SimpleTest.dpr')
 
       - name: Compile by FreePascal 64-bit with -dDontUseASMVersion
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseASMVersion', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseASMVersion', '-O4', 'SimpleTest.dpr')
 
+      - name: Compile by FreePascal 64-bit with -dDisableMemoryLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableMemoryLeakReporting', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dRequireIDEPresenceForLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '--Px86_64', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')

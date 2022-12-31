@@ -421,7 +421,7 @@ Combine it with the two options below for further fine-tuning.}
    leaks. This option has no effect if the option "EnableMemoryLeakReporting"
    is not also set.}
 
-  {.$define RequireIDEPresenceForLeakReporting}
+  {$define RequireIDEPresenceForLeakReporting}
 
 
   {Set this option to require the program to be run inside the IDE debugger to
