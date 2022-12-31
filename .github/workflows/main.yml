@@ -27,12 +27,12 @@ jobs:
       - name: Compile with various defined options
         run: |
           cd $GITHUB_WORKSPACE/Tests/Simple
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -O0 SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -O- SimpleTest.dpr
 
       - name: Compile with -dDEBUG -g -dFullDebugMode
         run: |
           cd $GITHUB_WORKSPACE/Tests/Simple
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -dFullDebugMode -O0 SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -dFullDebugMode -O- SimpleTest.dpr
 
       - name: Compile with -dFullDebugMode
         run: |
@@ -131,13 +131,13 @@ jobs:
       - name: Compile by FreePascal 32-bit with -dDEBUG 
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O0', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
 
 
       - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-dFullDebugMode', '-O0', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-dFullDebugMode', '-O-', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dFullDebugMode but not DEBUG
         run: |
