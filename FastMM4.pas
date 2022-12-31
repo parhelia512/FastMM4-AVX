@@ -6821,6 +6821,10 @@ end;
 
 {----------------Windows Emulation Functions for Kylix / OS X Support-----------------}
 
+
+const
+  FREE_TYPE_0 = Uint32(0);
+
 {$ifdef POSIX}
 
 const
@@ -6833,7 +6837,6 @@ const
   MEM_COMMIT = Uint32($1000);
   MEM_RELEASE = Uint32($8000);
   MEM_TOP_DOWN = Uint32($100000);
-  FREE_TYPE_0 = Uint32(0);
   PAGE_READWRITE = 4;
 
 procedure MessageBoxA(hWnd: Cardinal; AMessageText, AMessageTitle: PAnsiChar; uType: Cardinal); stdcall;
