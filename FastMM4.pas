@@ -12995,7 +12995,12 @@ asm
   {Get the block header: Is it actually a small block?}
 
 {$ifdef AssumeMultiThreaded}
+{$ifdef FPC}
+  xor ecx, ecx
+  push ecx // empty local variable into the stack
+{$else}
   push 0 // empty local variable into the stack
+{$endif}
 {$else}
   {Branchless operations to avoid misprediction}
   cmp byte ptr [IsMultiThread], 0
