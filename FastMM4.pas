@@ -3607,7 +3607,7 @@ begin
 end;
 {$else}
 type
-  TSwitchToThread = function: BOOL; stdcall;
+  TSwitchToThread = function: Windows.BOOL; stdcall;
 var
   FSwitchToThread: TSwitchToThread;
 
@@ -18852,21 +18852,17 @@ var
   LSlot: Integer;
 {$endif}
   LByte: Byte;
+  {$ifndef DisablePauseAndSwitchToThread}
+  {$ifndef POSIX}
+  LProcAddr: Pointer;
+  {$endif}
+  {$endif}
 begin
 
 {$ifndef DisablePauseAndSwitchToThread}
 {$ifndef POSIX}
-  {$ifdef FPC}
-     {$ifdef 32bit}
-       FSwitchToThread
-     {$else}
-       Pointer(FSwitchToThread)
-     {$endif}
-  {$else}
-     FSwitchToThread
-  {$endif}
-
-  := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+  LProcAddr := GetProcAddress(GetModuleHandle(Kernel32), 'SwitchToThread');
+  FSwitchToThread := TSwitchToThread(LProcAddr);
 {$endif}
 {$endif}
 
