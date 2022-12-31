@@ -19,28 +19,80 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Compile a simple demo in ObjFPC mode
-        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC -Tlinux -Px86_64 SimpleTest.dpr
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC -Tlinux -Px86_64 -O4 SimpleTest.dpr
 
       - name: Compile a simple demo in Delphi mode
-        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -Mdelphi -Tlinux -Px86_64 SimpleTest.dpr
+        run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -Mdelphi -Tlinux -Px86_64 -O4 SimpleTest.dpr
 
       - name: Compile with various defined options
         run: |
           cd $GITHUB_WORKSPACE/Tests/Simple
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dFullDebugMode SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign16Bytes SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign32Bytes SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dForceSingleThreaded SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisablePauseAndSwitchToThread SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseASMVersion SimpleTest.dpr
-          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisableAsmCodeAlign SimpleTest.dpr
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -O0 SimpleTest.dpr
+
+      - name: Compile with -dDEBUG -g -dFullDebugMode
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDEBUG -g -dFullDebugMode -O0 SimpleTest.dpr
+
+      - name: Compile with -dFullDebugMode
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dFullDebugMode -O4 SimpleTest.dpr
+
+      - name: Compile with -dAlign16Bytes
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign16Bytes -O4 SimpleTest.dpr
+
+      - name: Compile with -dAlign32Bytes
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dAlign32Bytes -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseCustomFixedSizeMoveRoutines
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomFixedSizeMoveRoutines -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseCustomVariableSizeMoveRoutines
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseCustomVariableSizeMoveRoutines -O4 SimpleTest.dpr
+
+      - name: Compile with -dForceSingleThreaded
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dForceSingleThreaded -O4 SimpleTest.dpr
+
+      - name: Compile with -dDisablePauseAndSwitchToThread
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDisablePauseAndSwitchToThread -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseSmallBlocksLockedCriticalSection
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseSmallBlocksLockedCriticalSection -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseMediumBlocksLockedCriticalSection
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseMediumBlocksLockedCriticalSection -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseLargeBlocksLockedCriticalSection
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseLargeBlocksLockedCriticalSection -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseASMVersion
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseASMVersion -O4 SimpleTest.dpr
+
+      - name: Compile with -dDontUseASMVersion
+        run: |
+          cd $GITHUB_WORKSPACE/Tests/Simple
+          fpc -B -Mdelphi -Tlinux -Px86_64 -dDontUseASMVersion -O4 SimpleTest.dpr
 
 
   build_windows:
@@ -71,39 +123,74 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\Delphi2007\Main\bin\DCC32.EXE' @('-B', '-U../..', '-DFullDebugMode', '-$D-', 'SimpleTestNoRelative.dpr')
 
-      - name: Compile by FreePascal 32-bit with various defined options
+      - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDisableAsmCodeAlign SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDEBUG -g SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dFullDebugMode SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dAlign16Bytes SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dAlign32Bytes SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dForceSingleThreaded SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDisablePauseAndSwitchToThread SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin32 -Pi386 -dDontUseASMVersion SimpleTest.dpr
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisableAsmCodeAlign', 'SimpleTest.dpr')
 
-      - name: Compile by FreePascal 64-bit with various defined options
+      - name: Compile by FreePascal 32-bit with -dDEBUG 
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDisableAsmCodeAlign SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDEBUG -g SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDEBUG -g -dFullDebugMode SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dFullDebugMode SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dAlign16Bytes SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dAlign32Bytes SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseCustomFixedSizeMoveRoutines SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseCustomVariableSizeMoveRoutines SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dForceSingleThreaded SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDisablePauseAndSwitchToThread SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseSmallBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseMediumBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseLargeBlocksLockedCriticalSection SimpleTest.dpr
-          & C:\FPC\3.2.2\bin\i386-win32\fpc.exe -B -Mdelphi -Twin64 -Px86_64 -dDontUseASMVersion SimpleTest.dpr
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O0', 'SimpleTest.dpr')
+
+
+      - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-dFullDebugMode', '-O0', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dFullDebugMode but not DEBUG
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dFullDebugMode', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dAlign16Bytes
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign16Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dAlign32Bytes
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign32Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseCustomFixedSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseCustomFixedSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseCustomVariableSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseCustomVariableSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dForceSingleThreaded
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dForceSingleThreaded', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDisablePauseAndSwitchToThread 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dDisablePauseAndSwitchToThread
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisablePauseAndSwitchToThread', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dDontUseSmallBlocksLockedCriticalSection
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseSmallBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseMediumBlocksLockedCriticalSection 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseMediumBlocksLockedCriticalSection', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseLargeBlocksLockedCriticalSection
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseLargeBlocksLockedCriticalSection', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseASMVersion
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseASMVersion', 'SimpleTest.dpr')
 
