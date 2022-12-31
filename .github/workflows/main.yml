@@ -149,9 +149,9 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign16Bytes', '-O4', 'SimpleTest.dpr')
 
-      - name: Compile by FreePascal 32-bit with 
+      - name: Compile by FreePascal 32-bit with -dAlign32Bytes 
         run: |
-          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dAlign32Bytes
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign32Bytes', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDontUseCustomFixedSizeMoveRoutines
