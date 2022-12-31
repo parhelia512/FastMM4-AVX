@@ -6829,13 +6829,11 @@ const
   MB_ICONERROR = $10;
   MB_TASKMODAL = $2000;
   MB_DEFAULT_DESKTOP_ONLY = $20000;
-(*
   {Virtual memory constants}
-  MEM_COMMIT = Windows.DWORD($1000);
-  MEM_RELEASE = Windows.DWORD($8000);
-  MEM_TOP_DOWN = Windows.DWORD($100000);
+  MEM_COMMIT = $1000;
+  MEM_RELEASE = $8000;
+  MEM_TOP_DOWN = $100000;
   PAGE_READWRITE = 4;
-*)
 
 procedure MessageBoxA(hWnd: Cardinal; AMessageText, AMessageTitle: PAnsiChar; uType: Cardinal); stdcall;
 begin
@@ -11894,8 +11892,8 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   call System.@FillChar
 {$endif}
   {Free the medium block pool}
-  push MEM_RELEASE
-  push 0
+  push (MEM_RELEASE)
+  push (0)
   push esi
   call VirtualFree
   {VirtualFree returns >0 if all is ok}
