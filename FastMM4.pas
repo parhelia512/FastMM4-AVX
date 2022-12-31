@@ -6823,7 +6823,7 @@ end;
 
 
 const
-  FREE_TYPE_0 = Uint32(0);
+  FREE_TYPE_0 = Cardinal(0);
 
 {$ifdef POSIX}
 
@@ -6834,9 +6834,9 @@ const
   MB_TASKMODAL = $2000;
   MB_DEFAULT_DESKTOP_ONLY = $20000;
   {Virtual memory constants}
-  MEM_COMMIT = Uint32($1000);
-  MEM_RELEASE = Uint32($8000);
-  MEM_TOP_DOWN = Uint32($100000);
+  MEM_COMMIT = Cardinal($1000);
+  MEM_RELEASE = Cardinal($8000);
+  MEM_TOP_DOWN = Cardinal($100000);
   PAGE_READWRITE = 4;
 
 procedure MessageBoxA(hWnd: Cardinal; AMessageText, AMessageTitle: PAnsiChar; uType: Cardinal); stdcall;
