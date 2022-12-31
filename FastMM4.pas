@@ -2184,6 +2184,11 @@ var
 
 function GetFastMMCpuFeatures: Word;
 
+var
+  FastMMCpuSmallestMonitorLineSize: Word;
+  FastMMCpuLargestMonitorLineSize: Word;
+
+
 implementation
 
 uses
@@ -2880,7 +2885,12 @@ const
   FastMMCpuFeatureFSRM                          = Byte(UnsignedBit shl 7);
 {$endif}
 
+{$ifndef USE_CPUID}
+  {$undef EnableWAITPKG}
+{$endif}
+
 {$ifdef EnableWAITPKG}
+const
   {WAITPKG (UMONITOR/UMWAIT) }
   FastMMCpuFeatureB_WAITPKG                     = Byte(UnsignedBit shl 0);
 {$endif}
@@ -18902,7 +18912,7 @@ var
   CpuXCR0: Int64;
 {$endif}
   MaxInputValueBasic: Cardinal;
-  LReg0, LReg1, LReg7_0: TCpuIdRegisters;
+  LReg0, LReg1, LReg5, LReg7_0: TCpuIdRegisters;
 {$endif}
 
   LInd,
@@ -18998,6 +19008,7 @@ ENDQOTE}
 
     with LReg0   do begin RegEAX := 0; RegEBX := 0; RegECX := 0; RegEDX := 0; end;
     with LReg1   do begin RegEAX := 0; RegEBX := 0; RegECX := 0; RegEDX := 0; end;
+    with LReg5   do begin RegEAX := 0; RegEBX := 0; RegECX := 0; RegEDX := 0; end;
     with LReg7_0 do begin RegEAX := 0; RegEBX := 0; RegECX := 0; RegEDX := 0; end;
 
     GetCPUID(0, 0, LReg0);
@@ -19168,6 +19179,9 @@ ENDQUOTE}
       ((LReg7_0.RegECX and (UnsignedBit shl 5)) <> 0) then
       begin
         FastMMCpuFeaturesB := FastMMCpuFeaturesB or FastMMCpuFeatureB_WaitPKG;
+        GetCPUID(5, 0, LReg5);
+        FastMMCpuSmallestMonitorLineSize := Word(LReg5.RegEAX and $FFFF);
+        FastMMCpuLargestMonitorLineSize := Word(LReg5.RegEBX and $FFFF);
       end;
       {$endif}
 
