@@ -11896,8 +11896,8 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   call System.@FillChar
 {$endif}
   {Free the medium block pool}
-  push MEM_RELEASE
-  push FREE_TYPE_0
+  push {$ifdef FPC} DWORD} {$endif} MEM_RELEASE
+  push {$ifdef FPC} DWORD} {$endif} FREE_TYPE_0
   push esi
   call VirtualFree
   {VirtualFree returns >0 if all is ok}
