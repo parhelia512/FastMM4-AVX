@@ -6924,7 +6924,11 @@ asm
 @Done:
 {$else 32Bit}
   {$ifndef unix}
+
+  {$ifdef AllowAsmNoframe}
 .noframe
+  {$endif}
+
   {On Entry:
    rcx = AAddress
    rdx = AByteCount
@@ -8087,7 +8091,7 @@ begin
     {Clear the user area of the block}
     DebugFillMem(Pointer(PByte(LPRemainderBlock) + SizeOf(TFullDebugBlockHeader) + SizeOf(NativeUInt))^,
       LSequentialFeedFreeSize - FullDebugBlockOverhead - SizeOf(NativeUInt),
-      {$ifndef CatchUseOfFreedInterfaces}DebugFillPattern{$else}NativeUInt(@VMTBadInterface){$endif});
+      {$ifndef CatchUseOfFreedInterfaces}NativeUInt(DebugFillPattern){$else}NativeUInt(@VMTBadInterface){$endif});
     {We need to set a valid debug header and footer in the remainder}
     PFullDebugBlockHeader(LPRemainderBlock)^.HeaderCheckSum := NativeUInt(LPRemainderBlock);
     PNativeUInt(PByte(LPRemainderBlock) + SizeOf(TFullDebugBlockHeader))^ := not NativeUInt(LPRemainderBlock);
@@ -9322,7 +9326,7 @@ begin
       {Clear the user area of the block}
       DebugFillMem(Pointer(PByte(Result) + (SizeOf(TFullDebugBlockHeader) + SizeOf(NativeUInt)))^,
         LPSmallBlockType^.BlockSize - FullDebugBlockOverhead - SizeOf(NativeUInt),
-        {$ifndef CatchUseOfFreedInterfaces}DebugFillPattern{$else}NativeUInt(@VMTBadInterface){$endif});
+        {$ifndef CatchUseOfFreedInterfaces}NativeUInt(DebugFillPattern){$else}NativeUInt(@VMTBadInterface){$endif});
       {Block was fed sequentially - we need to set a valid debug header. Use
        the block address.}
       PFullDebugBlockHeader(Result)^.HeaderCheckSum := NativeUInt(Result);
@@ -9442,7 +9446,7 @@ begin
             {Clear the user area of the block}
             DebugFillMem(Pointer(PByte(Result) + SizeOf(TFullDebugBlockHeader) + SizeOf(NativeUInt))^,
               LBlockSize - FullDebugBlockOverhead - SizeOf(NativeUInt),
-              {$ifndef CatchUseOfFreedInterfaces}DebugFillPattern{$else}NativeUInt(@VMTBadInterface){$endif});
+              {$ifndef CatchUseOfFreedInterfaces}NativeUInt(DebugFillPattern){$else}NativeUInt(@VMTBadInterface){$endif});
           end;
 {$endif}
           {Done}
@@ -14649,7 +14653,9 @@ asm
     xor edx, edx {Clear the edx and ecx value on exit just for safety}
     xor ecx, ecx
 {$else}
+{$ifdef AllowAsmNoframe}
 .noframe
+{$endif}
   {On entry for 64-bit Windows:
     ecx = CompareVal,
     edx = NewVal,
@@ -14700,7 +14706,9 @@ asm
 {$ifdef 32Bit}
   lock dec ThreadsInFullDebugModeRoutine
 {$else}
+{$ifdef AllowAsmNoframe}
 .noframe
+{$endif}
   lea rax, ThreadsInFullDebugModeRoutine
   lock dec dword ptr [rax]
 {$endif}
@@ -14712,7 +14720,9 @@ asm
 {$ifdef 32Bit}
   lock inc CurrentAllocationNumber
 {$else}
+{$ifdef AllowAsmNoframe}
 .noframe
+{$endif}
   lea rax, CurrentAllocationNumber
   lock inc dword ptr [rax]
 {$endif}
@@ -14811,7 +14821,9 @@ asm
   add ecx, 4
   js @AddLoop
 {$else}
+{$ifdef AllowAsmNoframe}
   .noframe
+{$endif}
   {On entry: rcx = AStartValue, rdx = APointer; r8 = ACount}
   add rdx, r8
   neg r8
@@ -14845,7 +14857,9 @@ asm
   sete al
 {$else}
   {On entry: rcx = APointer; rdx = ACount; r8 = AFillPattern}
+  {$ifdef AllowAsmNoframe}
   .noframe
+  {$endif}
   add rcx, rdx
   neg rdx
   {$ifdef AsmCodeAlign}{$ifdef AsmAlNoDot}align{$else}.align{$endif} 16{$endif}
@@ -14998,7 +15012,9 @@ asm
   mov ecx, edx
   ror eax, cl
 {$else}
+{$ifdef AllowAsmNoframe}
   .noframe
+{$endif}
   mov rax, rcx
   mov rcx, rdx
   ror rax, cl
@@ -15015,7 +15031,7 @@ begin
   if AUserOffset < SizeOf(Pointer) then
   begin
 {$ifdef FPC}
-    LFillPattern := DebugFillPattern;
+    LFillPattern := NativeUInt(DebugFillPattern);
 {$else}
     LFillPattern := NativeUInt(@FreedObjectVMT.VMTMethods[0]);
 {$endif}
@@ -15023,7 +15039,7 @@ begin
   else
   begin
 {$ifndef CatchUseOfFreedInterfaces}
-    LFillPattern := DebugFillPattern;
+    LFillPattern := NativeUInt(DebugFillPattern);
 {$else}
     LFillPattern := NativeUInt(@VMTBadInterface);
 {$endif}
@@ -15526,7 +15542,7 @@ begin
         {Clear the previous block trailer}
         PNativeUInt(PByte(Result) + SizeOf(TFullDebugBlockHeader) + PFullDebugBlockHeader(Result)^.UserSize)^ :=
         {$ifndef CatchUseOfFreedInterfaces}
-          DebugFillPattern;
+          NativeUInt(DebugFillPattern);
         {$else}
           RotateRight(NativeUInt(@VMTBadInterface), (PFullDebugBlockHeader(Result).UserSize and (SizeOf(Pointer) - 1)) * 8);
         {$endif}
@@ -15681,7 +15697,7 @@ begin
         LActualBlock^.AllocatedByRoutine := nil;
         {Clear the user area of the block}
         DebugFillMem(APointer^, LActualBlock^.UserSize,
-          {$ifndef CatchUseOfFreedInterfaces}DebugFillPattern{$else}NativeUInt(@VMTBadInterface){$endif});
+          {$ifndef CatchUseOfFreedInterfaces}NativeUInt(DebugFillPattern){$else}NativeUInt(@VMTBadInterface){$endif});
 {$ifndef FPC}
         {Set a pointer to the dummy VMT}
         PNativeUInt(APointer)^ := NativeUInt(@FreedObjectVMT.VMTMethods[0]);
@@ -15794,7 +15810,7 @@ begin
         DebugFillMem(Pointer(PByte(APointer) + NativeUInt(ANewSize) + SizeOf(NativeUInt))^,
           NativeInt(LActualBlock^.UserSize) - ANewSize,
 {$ifndef CatchUseOfFreedInterfaces}
-          DebugFillPattern);
+          NativeUInt(DebugFillPattern));
 {$else}
           RotateRight(NativeUInt(@VMTBadInterface), (ANewSize and (SizeOf(Pointer) - 1)) * 8));
 {$endif}
