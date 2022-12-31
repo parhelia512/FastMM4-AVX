@@ -16420,7 +16420,7 @@ begin
   ReleaseLockByte(ExpectedMemoryLeaksListLocked);
 end;
 
-function RegisterExpectedMemoryLeak(ALeakedObjectClass: TClass; ACount: Integer = 1): Boolean; overload;
+function RegisterExpectedMemoryLeak(ALeakedObjectClass: TClass; ACount: Integer {$ifndef FPC}= 1{$endif}): Boolean; overload;
 var
   LNewEntry: TExpectedMemoryLeak;
 begin
@@ -16477,7 +16477,7 @@ begin
 end;
 {$endif}
 
-function RegisterExpectedMemoryLeak(ALeakedBlockSize: NativeInt; ACount: Integer = 1): Boolean; overload;
+function RegisterExpectedMemoryLeak(ALeakedBlockSize: NativeInt; ACount: Integer {$ifndef FPC}= 1{$endif}): Boolean; overload;
 var
   LNewEntry: TExpectedMemoryLeak;
 begin
@@ -16523,7 +16523,7 @@ begin
   ReleaseLockByte(ExpectedMemoryLeaksListLocked);
 end;
 
-function UnregisterExpectedMemoryLeak(ALeakedObjectClass: TClass; ACount: Integer = 1): Boolean; overload;
+function UnregisterExpectedMemoryLeak(ALeakedObjectClass: TClass; ACount: Integer {$ifndef FPC}= 1{$endif}): Boolean; overload;
 begin
   Result := RegisterExpectedMemoryLeak(ALeakedObjectClass, - ACount);
 end;
@@ -16535,7 +16535,7 @@ begin
 end;
 {$endif}
 
-function UnregisterExpectedMemoryLeak(ALeakedBlockSize: NativeInt; ACount: Integer = 1): Boolean; overload;
+function UnregisterExpectedMemoryLeak(ALeakedBlockSize: NativeInt; ACount: Integer {$ifndef FPC}= 1{$endif}): Boolean; overload;
 begin
   Result := RegisterExpectedMemoryLeak(ALeakedBlockSize, - ACount);
 end;
