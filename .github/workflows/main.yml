@@ -133,7 +133,6 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
 
-
       - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
@@ -164,14 +163,14 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseCustomVariableSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
 
-      - name: Compile by FreePascal 32-bit with 
+      - name: Compile by FreePascal 32-bit with -dForceSingleThreaded
         run: |
-          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dForceSingleThreaded
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dForceSingleThreaded', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDisablePauseAndSwitchToThread 
         run: |
-          cd $Env:GITHUB_WORKSPACE/Tests/Simple with -dDisablePauseAndSwitchToThread
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple 
           & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisablePauseAndSwitchToThread', '-O4', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with 
