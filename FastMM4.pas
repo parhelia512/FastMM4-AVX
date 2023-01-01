@@ -2182,12 +2182,10 @@ var
 {$endif}
 {$endif}
 
+{$ifdef USE_CPUID}
 function GetFastMMCpuFeatures: Word;
-
-var
-  FastMMCpuSmallestMonitorLineSize: Word;
-  FastMMCpuLargestMonitorLineSize: Word;
-
+procedure GetFastMMCpuUserModeMonitorLineSizes(var Smallest, Largest: Word);
+{$endif}
 
 implementation
 
@@ -3238,6 +3236,9 @@ var
   These features are mostly used for faster memory move operations}
   FastMMCpuFeaturesA: Byte;
   FastMMCpuFeaturesB: Byte;
+
+  FastMMCpuSmallestMonitorLineSize: Word;
+  FastMMCpuLargestMonitorLineSize: Word;
 {$endif}
 
   {Is a MessageBox currently showing? If so, do not show another one.}
@@ -20210,6 +20211,7 @@ begin
 end;
 {$endif}
 
+{$ifdef USE_CPUID}
 function GetFastMMCpuFeatures: Word;
 var
   W: Word;
@@ -20218,6 +20220,13 @@ begin
   Result := (W shl 8) or FastMMCpuFeaturesA;
 end;
 
+procedure GetFastMMCpuUserModeMonitorLineSizes(var Smallest, Largest: Word);
+begin
+  Smallest := FastMMCpuSmallestMonitorLineSize;
+  Largest := FastMMCpuLargestMonitorLineSize;
+end;
+
+{$endif}
 
 procedure RunInitializationCode;
 begin

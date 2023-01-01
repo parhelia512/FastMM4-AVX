@@ -1,4 +1,4 @@
-program project1;
+program Realloc;
 
 {$mode objfpc}{$H+}
 {$APPTYPE CONSOLE}
@@ -103,6 +103,7 @@ var
   i: Integer;
   w: Word;
   LThreads: array[0..CNumThreads-1] of TBenchmarkThread;
+  LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize: Word;
 begin
   w := GetFastMMCpuFeatures;
   for i := Low(A) to High(A) do
@@ -112,8 +113,9 @@ begin
   if (W and $100) <> 0 then
   begin
     WriteLn('Wait PKG is supported');
-    WriteLn('Smallest monitor line size = ', FastMMCpuSmallestMonitorLineSize);
-    WriteLn('Largest monitor line size = ', FastMMCpuLargestMonitorLineSize);
+    GetFastMMCpuUserModeMonitorLineSizes(LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize);
+    WriteLn('Smallest monitor line size = ', LFastMMCpuSmallestMonitorLineSize);
+    WriteLn('Largest monitor line size = ', LFastMMCpuLargestMonitorLineSize);
 
   end else
   begin
