@@ -2058,7 +2058,7 @@ function DetectStringData(APMemoryBlock: Pointer;
 procedure WalkAllocatedBlocks(ACallBack: TWalkAllocatedBlocksCallback; AUserData: Pointer);
 {Writes a log file containing a summary of the memory manager state and a summary of allocated blocks grouped by
  class. The file will be saved in UTF-8 encoding (in supported Delphi versions). Returns True on success. }
-function LogMemoryManagerStateToFile(const AFileName: string; const AAdditionalDetails: string = ''): Boolean;
+function LogMemoryManagerStateToFile(const AFileName: string; const AAdditionalDetails: string {$ifndef FPC}= ''{$endif}): Boolean;
 
 {$ifdef UseReleaseStack}
 {$ifdef DebugReleaseStack}
@@ -17043,7 +17043,7 @@ end;
 
 {Writes a log file containing a summary of the memory mananger state and a summary of allocated blocks grouped by
  class. The file will be saved in UTF-8 encoding (in supported Delphi versions). Returns True on success. }
-function LogMemoryManagerStateToFile(const AFileName: string; const AAdditionalDetails: string): Boolean;
+function LogMemoryManagerStateToFile(const AFileName: string; const AAdditionalDetails: string {$ifndef FPC}= ''{$endif}): Boolean;
 const
   MsgBufferSize = 65536;
   MaxLineLength = 512;
