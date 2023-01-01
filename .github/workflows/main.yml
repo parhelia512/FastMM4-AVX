@@ -296,4 +296,4 @@ jobs:
       - name: Compile by FreePascal 64-bit with -dRequireIDEPresenceForLeakReporting
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '--Px86_64', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
+          & 'C:\FPC\3.2.2\bin\i386-win32\fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
