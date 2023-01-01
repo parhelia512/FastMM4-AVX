@@ -74,7 +74,15 @@ begin
       end;
     end;
   end;
+
+  {Free all residual pointers}
+  for i := 0 to NumPointers - 1 do
+  begin
+    System.ReallocMem(Pointers^[i], 0);
+  end;
+
   FreeMem(Pointers, NumPointers*SizeOf(Pointer));
+  FreeMem(BlockSizes, NumPointers*SizeOf(Integer));
 end;
 
 
