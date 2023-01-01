@@ -6831,10 +6831,6 @@ end;
 
 {----------------Windows Emulation Functions for Kylix / OS X Support-----------------}
 
-
-const
-  FREE_TYPE_0 = Cardinal(0);
-
 {$ifdef POSIX}
 
 const
@@ -11908,12 +11904,12 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   {Free the medium block pool}
 {$ifdef FPC}
   mov eax, MEM_RELEASE
-  mov edx, FREE_TYPE_0
+  xor edx, edx
   push eax
   push edx
 {$else}
   push MEM_RELEASE
-  push FREE_TYPE_0
+  push 0
 {$endif}
   push esi
   call VirtualFree

@@ -4,10 +4,13 @@ program project1;
 {$APPTYPE CONSOLE}
 
 uses
+  {$IFDEF UNIX}
   cthreads,
-  FastMM4,
-  Classes, SysUtils;
-  { you can add units after this }
+  {$ENDIF}
+  FastMM4 in '../../FastMM4.pas',
+  FastMM4Messages in '../../FastMM4Messages.pas',
+  Classes,
+  SysUtils;
 
 procedure RunBenchmark;
 const
@@ -71,7 +74,7 @@ begin
       end;
     end;
   end;
-  {What we end with should be close to the peak usage}
+  FreeMem(Pointers, NumPointers*SizeOf(Pointer));
 end;
 
 
@@ -98,12 +101,11 @@ begin
     GetMem(A[i], i+1);
   for i := Low(A) to High(A) do
     FreeMem(A[i], i+1);
-//  WriteLn(w);
   if (W and $100) <> 0 then
   begin
     WriteLn('Wait PKG is supported');
-    WriteLn('Smallest monitor line size', FastMMCpuSmallestMonitorLineSize);
-    WriteLn('Largest monitor line size', FastMMCpuLargestMonitorLineSize);
+    WriteLn('Smallest monitor line size = ', FastMMCpuSmallestMonitorLineSize);
+    WriteLn('Largest monitor line size = ', FastMMCpuLargestMonitorLineSize);
 
   end else
   begin
