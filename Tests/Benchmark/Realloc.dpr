@@ -1,6 +1,9 @@
 program Realloc;
 
+{$IFDEF FPC}
 {$mode objfpc}{$H+}
+{$ENDIF}
+
 {$APPTYPE CONSOLE}
 
 uses
@@ -15,6 +18,7 @@ uses
 procedure RunBenchmark;
 const
   Prime = 10513;
+
 var
   sz, i, LPointerNumber, FIterCount, NumPointers, BlockSizeDelta, MaxBlockSize, MinBlockSize: Integer;
   CurValue: Int64;
@@ -24,14 +28,15 @@ type
   PReallocMemBenchmarkBlockSizesArray = ^TReallocMemBenchmarkBlockSizesArray;
   PReallocMemBenchmarkPointerArray    = ^TReallocMemBenchmarkPointerArray;
 
-  TReallocMemBenchmarkPointerArray          =  packed array[0..MaxInt div SizeOf(Pointer)-1] of Pointer;
-  TReallocMemBenchmarkBlockSizesArray       =  packed array[0..MaxInt div SizeOf(Pointer)-1] of Integer;
+  TReallocMemBenchmarkPointerArray    =  packed array[0..MaxInt div SizeOf(Pointer)-1] of Pointer;
+  TReallocMemBenchmarkBlockSizesArray =  packed array[0..MaxInt div SizeOf(Pointer)-1] of Integer;
 
 var
-    BlockSizes: PReallocMemBenchmarkBlockSizesArray;
-    Pointers: PReallocMemBenchmarkPointerArray;
+  BlockSizes: PReallocMemBenchmarkBlockSizesArray;
+  Pointers: PReallocMemBenchmarkPointerArray;
 
 begin
+
   MaxBlockSize := 0;
   MinBlockSize := MaxInt;
   CurValue := Prime;
@@ -97,14 +102,36 @@ begin
 end;
 
 const
-  CNumThreads = 12;
+  CDefaultNumThreads = 12;
+
 var
+  VNumThreads: Integer;
   A: array[0..1000] of Pointer;
-  i: Integer;
+  i, j: Integer;
   w: Word;
-  LThreads: array[0..CNumThreads-1] of TBenchmarkThread;
+  LThreads: array of TBenchmarkThread;
   LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize: Word;
+
 begin
+  WriteLn('Usage: '+ExtractFileName(ParamStr(0))+ '<numthreads> [disable_waitpkg]');
+  VNumThreads := CDefaultNumThreads;
+  if (ParamCount >= 1) then
+  begin
+    i := -1; j := -1;
+    Val(ParamStr(1), i, j);
+    if (j = 0) and (i > 0) then VNumThreads := i;
+  end;
+  SetLength(LThreads, VNumThreads);
+  if (ParamCount >= 2) then
+  begin
+    If ParamStr(2) = 'disable_waitpkg' then
+    begin
+      WriteLn('Disabling WaitPKG...');
+      FastMMDisableWaitPKG;
+    end;
+  end;
+
+  WriteLn('Running with '+IntToStr(VNumThreads)+' threads...');
   w := GetFastMMCpuFeatures;
   for i := Low(A) to High(A) do
     GetMem(A[i], i+1);
@@ -113,6 +140,8 @@ begin
   if (W and $100) <> 0 then
   begin
     WriteLn('Wait PKG is supported');
+    LFastMMCpuSmallestMonitorLineSize := 0;
+    LFastMMCpuLargestMonitorLineSize := 0;
     GetFastMMCpuUserModeMonitorLineSizes(LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize);
     WriteLn('Smallest monitor line size = ', LFastMMCpuSmallestMonitorLineSize);
     WriteLn('Largest monitor line size = ', LFastMMCpuLargestMonitorLineSize);
