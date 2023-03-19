@@ -6,7 +6,7 @@ FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support fo
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.0.7
+Version 1.0.6
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.993 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -261,11 +261,6 @@ If not, see <http://www.gnu.org/licenses/>.
 
 
 FastMM4-AVX Version History:
-
-- 1.0.7 (19 March 2023) - support for umonitor/umwait CPU instructions which
-    provide significant spead increase when the number of virtual threads 
-    used by the program exceeds the number of physical threads provided by 
-    the CPU; otherwise there is no benefit.
 
 - 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
@@ -1749,7 +1744,7 @@ of just one option: "Boolean short-circuit evaluation".}
 {-------------------------Public constants-----------------------------}
 const
   {The current version of FastMM4-AVX}
-  FastMM4AvxVersion = '1.0.7';
+  FastMM4AvxVersion = '1.0.6';
   {The current version of FastMM}
   FastMMVersion = '4.993';
 
@@ -3724,7 +3719,7 @@ asm
    call GetMediumBlocksLockedPointer
    mov  r8, rax
    {$ELSE}
-   lea  r8, LargeBlocksLock.MediumBlocksLocked
+   lea  r8, MediumBlocksLock.MediumBlocksLocked
    {$ENDIF}
 
    mov  eax, cLockByteLocked
@@ -3816,9 +3811,9 @@ asm
    jz   @SwitchToThreadPause32
    db   $F3, $90 // pause
 @FirstComparePause32:
-   cmp  [LargeBlocksLock.MediumBlocksLocked], al
+   cmp  [MediumBlocksLock.MediumBlocksLocked], al
    je   @NormalLoadLoopPause32
-   lock xchg [LargeBlocksLock.MediumBlocksLocked], al
+   lock xchg [MediumBlocksLock.MediumBlocksLocked], al
    cmp  al, cLockByteLocked
    je   @DidntLockPause32
    jmp	@Finish
@@ -7880,7 +7875,7 @@ begin
   {$ENDIF}
   {$ELSE}
       Sleep(InitialSleepTime);
-      if AcquireLockByte(LargeBlocksLock.MediumBlocksLocked) then
+      if AcquireLockByte(MediumBlocksLock.MediumBlocksLocked) then
         Break;
       Sleep(AdditionalSleepTime);
   {$ENDIF}
@@ -7909,7 +7904,7 @@ asm
 @MediumBlockLockLoop:
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to lock the medium blocks}
-  lock    cmpxchg LargeBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
+  lock    cmpxchg MediumBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
   je      @DoneNoContention
 {$IFDEF NeverSleepOnThreadContention}
   {Pause instruction (improves performance on P4)}
@@ -7934,7 +7929,7 @@ asm
   {Try again}
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to grab the block type}
-  lock    cmpxchg LargeBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
+  lock    cmpxchg MediumBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
   je      @DoneWithContention
   {Couldn't lock the medium blocks - sleep and try again}
   push    ecx
@@ -7969,7 +7964,7 @@ begin
     LeaveCriticalSection(MediumBlocksLockedCS);
   end;
   {$ELSE}
-  ReleaseLockByte(LargeBlocksLock.MediumBlocksLocked);
+  ReleaseLockByte(MediumBlocksLock.MediumBlocksLocked);
   {$ENDIF}
 end;
 
@@ -10175,7 +10170,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlMedBlksAftrAllocNewSeqFd:
@@ -10206,7 +10201,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10328,7 +10323,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10396,7 +10391,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlMedBlkAftrGotMedBlkForMedium:
@@ -10874,7 +10869,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @UnlockSmallBlockAndExit
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10903,7 +10898,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -11025,7 +11020,7 @@ but we don't need them at this point - we only save RAX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -11101,7 +11096,7 @@ but we don't need them at this point - we only save RAX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -12070,7 +12065,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlckMedBlksAftrBinFrMedBlk:
@@ -12130,7 +12125,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
@@ -12183,7 +12178,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlckMedBlksAftrMkEmptMedPlSeqFd:
@@ -12650,7 +12645,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   xor eax, eax
   jmp @Done
@@ -12710,7 +12705,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
@@ -12760,7 +12755,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   xor eax, eax
   jmp @Done
@@ -13585,7 +13580,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit4Reg
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -13749,7 +13744,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit4Reg
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -13769,7 +13764,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
@@ -14193,7 +14188,7 @@ but we don't need them at this point, since we are about to exit}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -14362,7 +14357,7 @@ but we don't need them at this point, since we are about to exit}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -14387,7 +14382,7 @@ so ew save RCX and RDX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov LargeBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
@@ -20171,7 +20166,7 @@ begin
     for LSlot := 0 to NumStacksPerBlock - 1 do
     begin
       if (not MediumReleaseStack[LSlot].IsEmpty)
-        and (AcquireLockByte(LargeBlocksLock.MediumBlocksLocked)) then
+        and (AcquireLockByte(MediumBlocksLock.MediumBlocksLocked)) then
       begin
         if MediumReleaseStack[LSlot].Pop(LMemBlock) then
           FreeMediumBlock(LMemBlock, True)
