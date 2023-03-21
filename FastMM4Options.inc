@@ -593,8 +593,8 @@ Combine it with the two options below for further fine-tuning.}
 
 {$endif}
 
-{$ifndef DisableWAITPKG}
-  {$define EnableWAITPKG}
+{$ifndef DisableWaitPKG}
+  {$define EnableWaitPKG}
 {$endif}
 
 {-----------------------Memory Manager Sharing Options------------------------}

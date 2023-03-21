@@ -2,11 +2,11 @@
 
 FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support for FastMM4)
  - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
- - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
+ - Copyright (C) 2020-2023 Maxim Masiutin. All rights reserved.
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.0.6
+Version 1.0.7
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.993 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -261,6 +261,8 @@ If not, see <http://www.gnu.org/licenses/>.
 
 
 FastMM4-AVX Version History:
+
+- 1.0.7 (21 March 2023) - implemented the use of umonitor/umwait instructions
 
 - 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
@@ -1744,7 +1746,7 @@ of just one option: "Boolean short-circuit evaluation".}
 {-------------------------Public constants-----------------------------}
 const
   {The current version of FastMM4-AVX}
-  FastMM4AvxVersion = '1.0.6';
+  FastMM4AvxVersion = '1.0.7';
   {The current version of FastMM}
   FastMMVersion = '4.993';
 
@@ -2203,9 +2205,18 @@ function FastMM_FreeDebugSupportLibrary : boolean;
 function GetFastMMCpuFeatures: Word;
 function GetFastMMCpuFeaturesA: Byte;
 function GetFastMMCpuFeaturesB: Byte;
+{$ENDIF}
+
+{$IFNDEF USE_CPUID}
+  {$undef EnableWaitPKG}
+{$ENDIF}
+
+
+{$IFDEF EnableWaitPKG}
 procedure GetFastMMCpuUserModeMonitorLineSizes(var Smallest, Largest: Word);
 procedure FastMMDisableWaitPKG;
 {$ENDIF}
+
 
 implementation
 
@@ -2918,11 +2929,7 @@ const
   FastMMCpuFeatureFSRM                          = Byte(UnsignedBit shl 7);
 {$ENDIF}
 
-{$IFNDEF USE_CPUID}
-  {$undef EnableWAITPKG}
-{$ENDIF}
-
-{$IFDEF EnableWAITPKG}
+{$IFDEF EnableWaitPKG}
 const
   {WAITPKG (UMONITOR/UMWAIT) }
   FastMMCpuFeatureB_WAITPKG                     = Byte(UnsignedBit shl 0);
@@ -3142,13 +3149,13 @@ var
   {Are medium blocks locked?}
 
   MediumBlocksLock: record
-  {$IFDEF EnableWAITPKG}
+  {$IFDEF EnableWaitPKG}
   MediumBlocksLockedPaddingBefore: array[0..127] of Byte;
   {$ENDIF}
 
   MediumBlocksLocked: TSynchronizationVariable;
 
-  {$IFDEF EnableWAITPKG}
+  {$IFDEF EnableWaitPKG}
   MediumBlocksLockedPaddingAfter: array[0..127] of Byte;
   {$ENDIF}
   end;
@@ -3175,13 +3182,13 @@ var
   {-----------------Large block management------------------}
   {Are large blocks locked?}
   LargeBlocksLock: record
-  {$IFDEF EnableWAITPKG}
+  {$IFDEF EnableWaitPKG}
   LargeBlocksLockedPaddingBefore: array[0..127] of Byte;
   {$ENDIF}
 
   LargeBlocksLocked: TSynchronizationVariable;
 
-  {$IFDEF EnableWAITPKG}
+  {$IFDEF EnableWaitPKG}
   LargeBlocksLockedPaddingAfter: array[0..127] of Byte;
   {$ENDIF}
   end;
@@ -3708,6 +3715,9 @@ end;
 {$IFNDEF DisablePauseAndSwitchToThread}
 {$IFDEF AuxAsmRoutines}
 procedure AcquireSpinLockMediumBlocks; assembler;
+
+{ Note that the assembler version of AcquireSpinLockMediumBlocks is assumed to preserve all volate registers except eax for 32-bit / rax for 64-bit).}
+
 asm
 {$IFDEF 64bit}
 
@@ -3715,6 +3725,7 @@ asm
   {$IFDEF AllowAsmNoframe}
   .noframe
   {$ENDIF}
+   push r8
    {$IFDEF FPC}
    call GetMediumBlocksLockedPointer
    mov  r8, rax
@@ -3728,8 +3739,10 @@ asm
    lock xchg [r8], al
    cmp  al, cLockByteLocked
    je   @DidntLockAtFirstAttempt
-   jmp  @Finish
+   jmp  @Finish64Bit
 @DidntLockAtFirstAttempt:
+
+{$IFDEF EnableWaitPKG}
    {$IFDEF FPC}
    push r8
    call GetFastMMCpuFeaturesB
@@ -3739,6 +3752,15 @@ asm
    {$ENDIF}
    test al, FastMMCpuFeatureB_WaitPKG
    jz   @NoWaitPKG
+
+   // Start of Umonitor-related section
+   mov  eax, cLockByteLocked
+   push rcx
+   push rdx
+   push r9
+   push r10
+   push r11
+
    jmp  @FirstLockMonitor
 @DidntLockUmonitor:
    push r8
@@ -3749,7 +3771,6 @@ asm
    jne  @TryXchgAfterUmonitor
 
 @FirstLockMonitor:
-   mov  eax, cLockByteLocked
    db   $F3, $41, $0F, $AE, $F0 // umonitor r8
    cmp  [r8], al
    jne  @TryXchgAfterUmonitor
@@ -3768,9 +3789,19 @@ asm
    lock xchg [r8], al
    cmp  al, cLockByteLocked
    je   @DidntLockUmonitor
-   jmp  @Finish
+   // Locked after umonitor
+   pop  r11
+   pop  r10
+   pop  r9
+   pop  rdx
+   pop  rcx
+
+   jmp  @Finish64Bit
 @NoWaitPKG:
+
    mov  eax, cLockByteLocked
+{$ENDIF EnableWaitPKG}
+   push r9
    mov  r9d, cPauseSpinWaitLoopCount
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 16{$ENDIF}
 @DidntLockPause64:
@@ -3784,18 +3815,26 @@ asm
    lock xchg [r8], al
    cmp  al, cLockByteLocked
    je   @DidntLockPause64
-   jmp	@Finish
+   pop  r9
+   jmp	@Finish64Bit
 @SwitchToThreadPause64:
    push rcx
    push rdx
    push r8
+   push r10
+   push r11
    call SwitchToThreadIfSupported
+   pop  r11
+   pop  r10
    pop  r8
    pop  rdx
    pop  rcx
    mov  eax, cLockByteLocked
    mov  r9d, cPauseSpinWaitLoopCount
    jmp  @NormalLoadLoopPause64
+@Finish64Bit:
+   pop  r8
+
 {$ELSE 64bit}
 
 // 32-bit code for AcquireSpinLockMediumBlocks
@@ -3816,14 +3855,15 @@ asm
    lock xchg [MediumBlocksLock.MediumBlocksLocked], al
    cmp  al, cLockByteLocked
    je   @DidntLockPause32
-   jmp	@Finish
+   jmp	@Finish32Bit
 @SwitchToThreadPause32:
    call SwitchToThreadIfSupported
    mov  edx, cPauseSpinWaitLoopCount
    mov  eax, cLockByteLocked
    jmp  @FirstComparePause32
+@Finish32Bit:
+
 {$ENDIF}
-@Finish:
 end;
 
 
@@ -3845,6 +3885,7 @@ asm
    je   @DidntLockAtFirstAttempt
    jmp  @Finish
 @DidntLockAtFirstAttempt:
+{$IFDEF EnableWaitPKG}
    {$IFDEF FPC}
    push rcx
    call GetFastMMCpuFeaturesB
@@ -3854,6 +3895,7 @@ asm
    {$ENDIF}
    test al, FastMMCpuFeatureB_WaitPKG
    jz   @NoWaitPKG
+   mov  eax, cLockByteLocked
    jmp  @FirstLockMonitor
 @DidntLockUmonitor:
    push r8
@@ -3866,7 +3908,6 @@ asm
    jne  @TryXchgAfterUmonitor
 
 @FirstLockMonitor:
-   mov  eax, cLockByteLocked
    db   $F3, $0F, $AE, $F1 // umonitor rcx
    cmp  [rcx], al
    jne  @TryXchgAfterUmonitor
@@ -3887,6 +3928,8 @@ asm
    jmp  @Finish
 @NoWaitPKG:
    mov  eax, cLockByteLocked
+{$ENDIF EnableWaitPKG}
+
    mov  r9d, cPauseSpinWaitLoopCount
 {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 16{$ENDIF}
 @DidntLock:
@@ -7438,28 +7481,28 @@ asm
   {Get nibble 7}
   movzx eax, ch
   mov dl, ch
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 6}
   movzx eax, bh
   or dl, bh
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 5}
   movzx eax, cl
   or dl, cl
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 4}
   movzx eax, bl
   or dl, bl
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
@@ -7469,27 +7512,27 @@ asm
   {Get nibble 3}
   movzx eax, ch
   or dl, ch
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 2}
   movzx eax, bh
   or dl, bh
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 1}
   movzx eax, cl
   or dl, cl
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   cmp dl, 1
   sbb edi, -1
   {Get nibble 0}
   movzx eax, bl
-  mov al, byte ptr HexTable[eax]
+  movzx eax, byte ptr HexTable[eax]
   mov [edi], al
   {Return a pointer to the end of the string}
   lea eax, [edi + 1]
@@ -7816,9 +7859,7 @@ end;
 {$ENDIF DisablePauseAndSwitchToThread}
 
 
-
-{Locks the medium blocks. Note that the 32-bit assembler version is assumed to
- preserve all registers except eax.}
+{Locks the medium blocks. Note that the assembler version is assumed to preserve all volatile registers except eax for 32-bit Assembly / rax for 64-bit Assembly).}
 
 {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm}
 
@@ -7900,7 +7941,7 @@ asm
   this implementation if you would like to use the old locking mechanism of
   the original FastMM4 }
 
-  {Note: This routine is assumed to preserve all registers except eax for 32-bit Assembly}
+  {Note: This routine is assumed to preserve all volatile registers except eax for 32-bit/ rax for 64-bit Assembly}
 @MediumBlockLockLoop:
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to lock the medium blocks}
@@ -9906,7 +9947,7 @@ like IsMultithreaded or MediumBlocksLocked}
    cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @FirstBlockLocked
   {$ELSE}
-   mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
+   movzx eax, byte ptr TSmallBlockType([ebx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @FirstBlockLocked
    cmp  al, cLockByteAvailable
@@ -9924,7 +9965,7 @@ like IsMultithreaded or MediumBlocksLocked}
    cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @SecondBlockLocked
   {$ELSE}
-   mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
+   movzx  eax, byte ptr TSmallBlockType([ebx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @SecondBlockLocked
    cmp  al, cLockByteAvailable
@@ -9943,7 +9984,7 @@ like IsMultithreaded or MediumBlocksLocked}
    cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @ThirdBlockLocked
   {$ELSE}
-   mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
+   movzx eax, TSmallBlockType([ebx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @ThirdBlockLocked
    cmp  al, cLockByteAvailable
@@ -9973,7 +10014,7 @@ like IsMultithreaded or MediumBlocksLocked}
    cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
    je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
    {$ELSE}
-   mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
+   movzx eax, TSmallBlockType([ebx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @NormalLoadLoop
    cmp  al, cLockByteAvailable
@@ -10061,13 +10102,14 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jz @MediumBlocksLockedForPool
 {$ENDIF}
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
+  // Assembly version of LockMediumBlocks preserves all volatile register (except eax), but non-assembly version does not, so we save ecx and edx for non-assembly implementation
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} push ecx; push edx {$ENDIF}
   call LockMediumBlocks
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop edx; pop ecx {$ENDIF}
 {$ELSE}
-   push edx
+   // Assembly version of AcquireSpinLockMediumBlocks preserves all volatile register (except eax),
+   // and we only have the assembly implementation of this function; there is no PurePascal implementation
    call AcquireSpinLockMediumBlocks
-   pop edx
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
@@ -10243,13 +10285,14 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jz @MediumBlocksLocked
 {$ENDIF}
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
+  // Assembly version of LockMediumBlocks preserves all volatile register (except eax), but non-assembly version does not, so we save ecx and edx for non-assembly implementation
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} push ecx; push edx {$ENDIF}
   call LockMediumBlocks
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop edx; pop ecx {$ENDIF}
 {$ELSE}
-  push edx
+   // Assembly version of AcquireSpinLockMediumBlocks preserves all volatile register (except eax),
+   // and we only have the assembly implementation of this function; there is no PurePascal implementation
   call AcquireSpinLockMediumBlocks
-  pop edx
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
@@ -10604,15 +10647,16 @@ asm
   {Block type and two sizes larger are all locked - give up and sleep}
    sub  rbx, rdx
    sub  rbx, rdx
-   push  rcx
+   push rcx
 
-   mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked
-   cmp  al, cLockByteLocked
+   cmp  byte ptr TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @DidntLockAtFirstAttempt
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
+   cmp  al, cLockByteLocked
    je   @DidntLockAtFirstAttempt
    jmp  @GotTheLock
 @DidntLockAtFirstAttempt:
+{$IFDEF EnableWaitPKG}
    test FastMMCpuFeaturesB, FastMMCpuFeatureB_WaitPKG
    jz   @NoWaitPKG
 
@@ -10662,11 +10706,12 @@ asm
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @NoWaitPKG:
+{$ENDIF EnableWaitPKG}
 
-@LockSmallBlockTypeLoop:
-   mov  eax, cLockByteLocked
-   mov  edx, cPauseSpinWaitLoopCount
+  mov   edx, cPauseSpinWaitLoopCount
+
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 16{$ENDIF}
+@LockSmallBlockTypeLoop64:
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -10677,7 +10722,7 @@ asm
    cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
  {$ELSE}
-  mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked
+  movzx eax, byte ptr TSmallBlockType([rbx]).SmallBlockTypeLocked
   cmp  al, cLockByteLocked
   je   @NormalLoadLoop
   cmp  al, cLockByteAvailable
@@ -10694,7 +10739,9 @@ asm
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @SwitchToThread:
   call  SwitchToThreadIfSupported
-  jmp   @LockSmallBlockTypeLoop
+  mov   eax, cLockByteLocked
+  mov   edx, cPauseSpinWaitLoopCount
+  jmp   @LockSmallBlockTypeLoop64
 
 {$ELSE !SmallBlocksLockedCriticalSection}
 
@@ -10753,7 +10800,10 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   test r12b, (UnsignedBit shl StateBitMultithreaded)
   jz @MediumBlocksLockedForPool
 {$ENDIF}
+
+ // Assembly versions of LockMediumBlocks / AcquireSpinLockMediumBlocks preserves all volatile register (except eax),
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
+ // but even if we use a PurePascal version, we don't rely on any volatile registers, so we do not have to save them
   call LockMediumBlocks
 {$ELSE}
   call AcquireSpinLockMediumBlocks
@@ -10939,7 +10989,10 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
   test r12b, (UnsignedBit shl StateBitMultithreaded)
   jz @MediumBlocksLocked
 {$ENDIF}
+
+  // Assembly versions of LockMediumBlocks / AcquireSpinLockMediumBlocks preserve all volatile register (except eax),
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
+  // but we do not rely on volatile register here, so even if we use a PurePascal implementation, we don't need to save registers here
   call LockMediumBlocks
 {$ELSE}
   call AcquireSpinLockMediumBlocks
@@ -11893,7 +11946,7 @@ for flags like IsMultiThreaded or MediumBlocksLocked}
   cmp  TSmallBlockType([ebx]).SmallBlockTypeLocked, al
   je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
  {$ELSE}
-  mov  al, TSmallBlockType([ebx]).SmallBlockTypeLocked
+  movzx eax, byte ptr TSmallBlockType([ebx]).SmallBlockTypeLocked
   cmp  al, cLockByteLocked
   je   @NormalLoadLoop
   cmp  al, cLockByteAvailable
@@ -12006,13 +12059,13 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   jz @MediumBlocksLocked
 {$ENDIF}
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
+  // Assembly version of LockMediumBlocks preserves all volatile register (except eax), but non-assembly version does not, so we save ecx and edx for non-assembly implementation
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} push ecx; push edx {$ENDIF}
   call LockMediumBlocks
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop edx; pop ecx {$ENDIF}
 {$ELSE}
-  push edx
+  // For AcquireSpinLockMediumBlocks, we have only the assembly version, and it saves all volatile registers
   call AcquireSpinLockMediumBlocks
-  pop edx
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
   or ebp, (UnsignedBit shl StateBitMediumLocked)
@@ -12394,7 +12447,7 @@ asm
    cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @PrepareForSpinLoop
    {$ELSE}
-   mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked
+   movzx eax, byte ptr TSmallBlockType([rbx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @PrepareForSpinLoop
    cmp  al, cLockByteAvailable
@@ -12411,13 +12464,14 @@ asm
    push rcx
    push rdx
 
-   mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked
-   cmp  al, cLockByteLocked
+   cmp  byte ptr TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @DidntLockAtFirstAttempt
    lock xchg TSmallBlockType([rbx]).SmallBlockTypeLocked, al
+   cmp  al, cLockByteLocked
    je   @DidntLockAtFirstAttempt
    jmp  @GotTheLock
 @DidntLockAtFirstAttempt:
+{$IFDEF EnableWaitPKG}
    test FastMMCpuFeaturesB, FastMMCpuFeatureB_WaitPKG
    jz   @NoWaitPKG
 
@@ -12467,13 +12521,12 @@ asm
    pop  r8
    jmp  @GotTheLock
 
-  {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @NoWaitPKG:
-
-@LockSmallBlockTypeLoop:
-   mov  eax, cLockByteLocked
+{$ENDIF EnableWaitPKG}
    mov  edx, cPauseSpinWaitLoopCount
+
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 16{$ENDIF}
+@LockSmallBlockTypeLoop64:
 @DidntLock:
 @NormalLoadLoop:
    dec  edx
@@ -12484,7 +12537,7 @@ asm
    cmp  TSmallBlockType([rbx]).SmallBlockTypeLocked, al
    je   @NormalLoadLoop // for static branch prediction, jump backwards means "likely"
    {$ELSE}
-   mov  al, TSmallBlockType([rbx]).SmallBlockTypeLocked
+   movzx eax, byte ptr TSmallBlockType([rbx]).SmallBlockTypeLocked
    cmp  al, cLockByteLocked
    je   @NormalLoadLoop
    cmp  al, cLockByteAvailable
@@ -12503,7 +12556,9 @@ asm
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @SwitchToThread:
    call  SwitchToThreadIfSupported
-   jmp   @LockSmallBlockTypeLoop
+   mov  eax, cLockByteLocked
+   mov  edx, cPauseSpinWaitLoopCount
+   jmp   @LockSmallBlockTypeLoop64
 
 {$ELSE !SmallBlocksLockedCriticalSection}
 
@@ -12580,7 +12635,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
   test r12b, (UnsignedBit shl StateBitMultithreaded)
   jz @MediumBlocksLocked // put test+jz together to allow macro-op fusion
 {$ENDIF}
-{The call destroys most of the volatile (caller-saved) registers,
+{The PurePascal version of LockMediumBlocks call destroys most of the volatile (caller-saved) registers,
 (RAX, RCX, RDX, R8, R9, R10, R11),
 but we don't need them, since we keep our data
 in nonvolatile (callee-saved) registers like  RBX, RSI, and R12}
@@ -13513,9 +13568,8 @@ asm
   call LockMediumBlocks
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop edx; pop ecx {$ENDIF}
 {$ELSE}
-  push edx
+  // this function preserves all volatile registers except eax
   call AcquireSpinLockMediumBlocks
-  pop edx
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
   or byte ptr ss:[esp+cLocalVarStackOfsMediumBlock], (UnsignedBit shl StateBitMediumLocked)
@@ -13651,6 +13705,7 @@ asm
   call LockMediumBlocks
   {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop edx; pop ecx {$ENDIF}
 {$ELSE}
+  // this function saves all the volatile registers, so we do not have to save them
   call AcquireSpinLockMediumBlocks
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
@@ -14116,10 +14171,12 @@ asm
 //@DoMediumLockForDownsize:
   {Lock the medium blocks}
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
-  mov rbx, rcx // save rcx
+  // Assembly version of LockMediumBlocks preserves all volatile register (except eax), but non-assembly version does not, so we save rcx and rdx for non-assembly implementation
+  {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} push rcx; push rdx {$ENDIF}
   call LockMediumBlocks
-  mov rcx, rbx // restore rcx
+  {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop rdx; pop rcx {$ENDIF}
 {$ELSE}
+  // this function saves all volatile registers, so we do not have to save ecx, etc
   call AcquireSpinLockMediumBlocks
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
@@ -14256,12 +14313,12 @@ but we don't need them at this point, since we are about to exit}
 //@DoMediumLockForUpsize:
 {$IFDEF CheckPauseAndSwitchToThreadForAsmVersion}
   {Lock the medium blocks.}
-  mov rbx, rcx // save rcx
-  mov r15, rdx // save rdx
+  // Assembly version of LockMediumBlocks preserves all volatile register (except eax), but non-assembly version does not, so we save ecx and edx for non-assembly implementation
+  {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} push rcx; push rdx {$ENDIF}
   call LockMediumBlocks
-  mov rcx, rbx // restore rcx
-  mov rdx, r15 // restore rdx
+  {$IFNDEF UseOriginalFastMM4_LockMediumBlocksAsm} pop rdx; pop rcx {$ENDIF}
 {$ELSE}
+  // This function preserves all volatile registers
   call AcquireSpinLockMediumBlocks
 {$ENDIF}
 {$IFNDEF AssumeMultiThreaded}
@@ -19433,7 +19490,7 @@ ENDQUOTE}
       end;
       {$ENDIF}
 
-      {$IFDEF EnableWAITPKG}
+      {$IFDEF EnableWaitPKG}
       if (MaxInputValueBasic > 7) and
 {ECX: Bit 05: WAITPKG (supports UMONITOR/UMWAIT)}
       ((LReg7_0.RegECX and (UnsignedBit shl 5)) <> 0) then
@@ -20503,10 +20560,12 @@ begin
   Largest := FastMMCpuLargestMonitorLineSize;
 end;
 
+{$IFDEF EnableWaitPKG}
 procedure FastMMDisableWaitPKG;
 begin
   FastMMCpuFeaturesB := FastMMCpuFeaturesB and not FastMMCpuFeatureB_WAITPKG;
 end;
+{$ENDIF EnableWaitPKG}
 
 {$ENDIF}
 
