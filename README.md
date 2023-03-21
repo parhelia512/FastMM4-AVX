@@ -2,11 +2,11 @@
 
 FastMM4-AVX (efficient synchronization and AVX1/AVX2/AVX512/ERMS/FSRM support for FastMM4)
  - Copyright (C) 2017-2020 Ritlabs, SRL. All rights reserved.
- - Copyright (C) 2020-2021 Maxim Masiutin. All rights reserved.
+ - Copyright (C) 2020-2023 Maxim Masiutin. All rights reserved.
 
 Written by Maxim Masiutin <maxim@masiutin.com>
 
-Version 1.0.6
+Version 1.0.7
 
 This is a fork of the "Fast Memory Manager" (FastMM) v4.993 by Pierre le Riche
 (see below for the original FastMM4 description)
@@ -261,6 +261,8 @@ If not, see <http://www.gnu.org/licenses/>.
 
 
 FastMM4-AVX Version History:
+
+- 1.0.7 (21 March 2023) - implemented the use of umonitor/umwait instructions
 
 - 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
