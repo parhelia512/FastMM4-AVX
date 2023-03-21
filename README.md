@@ -16,7 +16,7 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
  - Efficient synchronization
    - improved synchronization between the threads; proper synchronization
      techniques are used depending on context and availability, i.e., spin-wait
-     loops, SwitchToThread, critical sections, etc.;
+     loops, umonitor / umwait, SwitchToThread, critical sections, etc.;
    - used the "test, test-and-set" technique for the spin-wait loops; this
      technique is recommended by Intel (see Section 11.4.3 "Optimization with
      Spin-Locks" of the Intel 64 and IA-32 Architectures Optimization Reference
