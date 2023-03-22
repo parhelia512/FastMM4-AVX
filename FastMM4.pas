@@ -20707,7 +20707,9 @@ begin
   ShowMessageBox(AMsg, LErrorMessageTitle);
 {$ENDIF}
   {Raise an access violation}
+{$IFNDEF POSIX}
   RaiseException(EXCEPTION_ACCESS_VIOLATION, 0, 0, nil);
+{$ENDIF}
 end;
 
 procedure CheckAlignment;
