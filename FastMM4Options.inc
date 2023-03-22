@@ -510,7 +510,6 @@ Combine it with the two options below for further fine-tuning.}
 
 {$endif}
 
-
 {$ifndef DisableAVX}
 
   {Set this option (EnableAVX) to enable use of AVX instructions under 64-bit mode.
@@ -594,7 +593,16 @@ Combine it with the two options below for further fine-tuning.}
 {$endif}
 
 {$ifndef DisableWaitPKG}
-  {$define EnableWaitPKG}
+
+  {Set this option (EnableWaitPKG) to enable user mode wait (WaitPKG)
+  instructions: umonitor/umwait, introduced by Alder Lake microarchitecture,
+  launched in 2021, to wait for a synchronization variable
+  instead of pause-based loop;
+  however these instuctions for FastMM synchronization are not as efficient
+  as pause-based loop, so only enable it if your tests show clear benefit
+  in your scenarios }
+
+  {.$define EnableWaitPKG}
 {$endif}
 
 {-----------------------Memory Manager Sharing Options------------------------}

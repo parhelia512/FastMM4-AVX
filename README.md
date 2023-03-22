@@ -15,8 +15,9 @@ What was added to FastMM4-AVX in comparison to the original FastMM4:
 
  - Efficient synchronization
    - improved synchronization between the threads; proper synchronization
-     techniques are used depending on context and availability, i.e., spin-wait
-     loops, umonitor / umwait, SwitchToThread, critical sections, etc.;
+     techniques are used depending on context and availability, i.e., pause-
+     based spin-wait loops, umonitor/umwait (WaitPKG), SwitchToThread,
+     critical sections, etc.;
    - used the "test, test-and-set" technique for the spin-wait loops; this
      technique is recommended by Intel (see Section 11.4.3 "Optimization with
      Spin-Locks" of the Intel 64 and IA-32 Architectures Optimization Reference
@@ -262,7 +263,12 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
-- 1.0.7 (21 March 2023) - implemented the use of umonitor/umwait instructions
+- 1.0.7 (22 March 2023) - implemented the optional use of user mode wait
+    (WaitPKG) umonitor/umwait instructions to wait for a synchronization
+    variable; it is disabled by default; define the "EnableWaitPKG" conditional
+    define to enable this feature; however it may not be as efficient
+    as the pause-based loop, so only use this feature it if your tests
+    show clear benefit in your scenarios.
 
 - 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
