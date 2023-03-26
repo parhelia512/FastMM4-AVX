@@ -112,7 +112,7 @@ var
   LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize: Word;
 
 begin
-  WriteLn('Usage: '+ExtractFileName(ParamStr(0))+ '<numthreads>'{$IFDEF EnableWaitPKG}+' [disable_waitpkg]'{$ENDIF});
+  WriteLn('Usage: '+ExtractFileName(ParamStr(0))+ ' <numthreads>'{$IFDEF EnableWaitPKG}+' [disable_waitpkg]'{$ENDIF});
   VNumThreads := CDefaultNumThreads;
   if (ParamCount >= 1) then
   begin
