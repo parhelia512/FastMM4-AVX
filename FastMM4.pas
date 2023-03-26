@@ -4973,7 +4973,7 @@ end;
 
 {$IFDEF EnableAVX512}
 {$IFDEF unix}
-AVX-512 is not yet implemented for UNIX
+{$message error AVX-512 is not yet implemented for UNIX}
 {$ELSE unix}
 procedure Move24AVX512(const ASource; var ADest; ACount: NativeInt); external;
 procedure Move56AVX512(const ASource; var ADest; ACount: NativeInt); external;
