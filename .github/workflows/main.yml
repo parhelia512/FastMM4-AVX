@@ -196,7 +196,7 @@ jobs:
       - name: Compile AVX-512 Assembly
         run: |
           cd $Env:GITHUB_WORKSPACE
-          & 'Compile_FastMM4_AVX512.cmd'
+          & 'nasm.exe' @('-Ox', '-Ov', '-f', 'win64', 'FastMM4_AVX512.asm')
 
       - name: Compile by FreePascal 64-bit with -dDisableAsmCodeAlign
         run: |
