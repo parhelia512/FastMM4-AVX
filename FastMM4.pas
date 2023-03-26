@@ -1708,7 +1708,7 @@ of just one option: "Boolean short-circuit evaluation".}
 
 
 {$IFDEF unix}
-{$unded EnableAVX512} // AVX-512 is not yet implemented for UNIX
+{$undef EnableAVX512} // AVX-512 is not yet implemented for UNIX
 {$ENDIF unix}
 
 
