@@ -4375,7 +4375,7 @@ asm
   {$ENDIF}
 end;
 
-{$ENDIF}
+{$ENDIF 64bit}
 
 {$IFDEF EnableAVX}
 
@@ -4993,21 +4993,9 @@ procedure Move248AVX512(const ASource; var ADest; ACount: NativeInt); external;
 procedure Move280AVX512(const ASource; var ADest; ACount: NativeInt); external;
 procedure Move312AVX512(const ASource; var ADest; ACount: NativeInt); external;
 procedure Move344AVX512(const ASource; var ADest; ACount: NativeInt); external;
-{$IFNDEF DisableMoveX32LpAvx512}
-procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); external;
-{$ENDIF}
-
-{ FastMM4_AVX512.obj file is needed to enable AVX-512 code for FastMM4-AVX.
-  Use "nasm.exe -Ox -f win64 FastMM4_AVX512.asm" to compile this .obj file.
-
-  Define DisableAVX512 if you don't want to compile this .obj file.}
-
-{$L FastMM4_AVX512.obj}
-
 
 {$ENDIF unix}
 {$ENDIF EnableAVX512}
-
 
 {$ENDIF EnableAVX}
 {$ENDIF 64bit}
@@ -6864,6 +6852,21 @@ asm
 end;
 
 {$ENDIF EnableERMS}
+
+
+{$IFDEF EnableAVX512}
+{$IFNDEF DisableMoveX32LpAvx512}
+procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); external;
+{$ENDIF}
+
+{ FastMM4_AVX512.obj file is needed to enable AVX-512 code for FastMM4-AVX.
+  Use "nasm.exe -Ox -f win64 FastMM4_AVX512.asm" to compile this .obj file.
+
+  Define DisableAVX512 if you don't want to compile this .obj file.}
+
+{$L FastMM4_AVX512.obj}
+{$ENDIF}
+
 
 {$IFDEF Align32Bytes}
 procedure MoveX32LpUniversal(const ASource; var ADest; ACount: NativeInt);
