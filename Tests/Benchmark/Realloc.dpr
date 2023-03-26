@@ -112,7 +112,7 @@ var
   LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize: Word;
 
 begin
-  WriteLn('Usage: '+ExtractFileName(ParamStr(0))+ '<numthreads> [disable_waitpkg]');
+  WriteLn('Usage: '+ExtractFileName(ParamStr(0))+ '<numthreads>'{$IFDEF EnableWaitPKG}+' [disable_waitpkg]'{$ENDIF});
   VNumThreads := CDefaultNumThreads;
   if (ParamCount >= 1) then
   begin
@@ -138,6 +138,7 @@ begin
     GetMem(A[i], i+1);
   for i := Low(A) to High(A) do
     FreeMem(A[i], i+1);
+  {$IFDEF EnableWaitPKG}
   if (W and $100) <> 0 then
   begin
     WriteLn('Wait PKG is supported');
@@ -150,6 +151,7 @@ begin
   begin
     WriteLn('Wait PKG is not supported')
   end;
+  {$ENDIF}
   for i := Low(LThreads) to High(LThreads) do
   begin
     LThreads[i] := TBenchmarkThread.Create(CCreateSuspendedThread);
