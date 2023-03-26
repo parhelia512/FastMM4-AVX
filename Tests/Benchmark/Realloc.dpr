@@ -121,6 +121,7 @@ begin
     if (j = 0) and (i > 0) then VNumThreads := i;
   end;
   SetLength(LThreads, VNumThreads);
+  {$IFDEF EnableWaitPKG}
   if (ParamCount >= 2) then
   begin
     If ParamStr(2) = 'disable_waitpkg' then
@@ -129,6 +130,7 @@ begin
       FastMMDisableWaitPKG;
     end;
   end;
+  {$ENDIF}
 
   WriteLn('Running with '+IntToStr(VNumThreads)+' threads...');
   w := GetFastMMCpuFeatures;
