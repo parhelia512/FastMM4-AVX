@@ -262,7 +262,9 @@ If not, see <http://www.gnu.org/licenses/>.
 
 FastMM4-AVX Version History:
 
-- 1.0.7 (21 March 2023) - implemented the use of umonitor/umwait instructions
+- 1.0.7 (21 March 2023) - implemented the use of umonitor/umwait instructions;
+    thanks to TetzkatLipHoka for the updated FullDebugMode to v1.64
+    of the original FastMM4.
 
 - 1.0.6 (25 August 2021) - it can now be compiled with any alignment (8, 16, 32)
     regardless of the target (x86, x64) and whether inline assembly is used
@@ -1286,7 +1288,6 @@ interface
   {$ENDIF}
 {$ELSE}
   {Defines for FreePascal}
-  {$define DisableAVX512}
   {$asmmode intel}
   {$IFDEF CPUX64}
     {$asmmode intel}
@@ -2947,11 +2948,6 @@ const
   FastMMCpuFeatureB_WAITPKG                     = Byte(UnsignedBit shl 0);
 {$ENDIF}
 
-const
-  CSmallBlocksPaddingAlign   = 48   {$IFDEF 32BIT}{$IFDEF Align32Bytes}-32{$ELSE}+64{$ENDIF}{$ENDIF};
-  CMediumBlocksPaddingAlign  = 128  {$IFDEF 32BIT}{$IFDEF Align32Bytes}-128{$ELSE}-96{$ENDIF}{$ENDIF};
-  CLargeBlocksPaddingAlign   = 32   {$IFDEF 32BIT}+16{$ENDIF};
-
 {-------------------------Private variables----------------------------}
 var
   {-----------------Small block management------------------}
@@ -2959,15 +2955,10 @@ var
   SmallBlockCriticalSections: array[0..NumSmallBlockTypes-1] of TRtlCriticalSection;
 {$ENDIF}
 
-  SmallBlocks: packed record
-
-    SmallBlockTypesPadding: array[0..CSmallBlocksPaddingAlign-1] of Byte;
-
-  {The small block types. Sizes include the leading header. Sizes are
-   picked to limit maximum wastage to about 10% or 256 bytes (whichever is
-   less) where possible.}
-    SmallBlockTypes: array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
-  end;
+{The small block types. Sizes include the leading header. Sizes are
+ picked to limit maximum wastage to about 10% or 256 bytes (whichever is
+ less) where possible.}
+  SmallBlockTypes: array[0..NumSmallBlockTypes - 1] of TSmallBlockType;
 
   SmallBlockTypeSizes: array[0..NumSmallBlockTypes - 1] of Word = (
     {8/16 byte jumps}
@@ -3169,17 +3160,7 @@ var
 
   {Are medium blocks locked?}
 
-  MediumBlocksLock: packed record
-    {$IFDEF EnableWaitPKG}
-    MediumBlocksLockedPaddingBefore: array[0..128-1+CMediumBlocksPaddingAlign] of Byte;
-    {$ENDIF}
-
-    MediumBlocksLocked: TSynchronizationVariable;
-
-    {$IFDEF EnableWaitPKG}
-    MediumBlocksLockedPaddingAfter: array[0..128-SizeOf(TSynchronizationVariable)-1] of Byte;
-    {$ENDIF}
-  end;
+  MediumBlocksLocked: TSynchronizationVariable;
 
 {$IFDEF MediumBlocksLockedCriticalSection}
   MediumBlocksLockedCS: TRTLCriticalSection;
@@ -3202,17 +3183,7 @@ var
   MediumBlockBins: array[0..MediumBlockBinCount - 1] of TMediumFreeBlock;
   {-----------------Large block management------------------}
   {Are large blocks locked?}
-  LargeBlocksLock: record
-    {$IFDEF EnableWaitPKG}
-    LargeBlocksLockedPaddingBefore: array[0..128-1+CLargeBlocksPaddingAlign] of Byte;
-    {$ENDIF}
-
-    LargeBlocksLocked: TSynchronizationVariable;
-
-    {$IFDEF EnableWaitPKG}
-    LargeBlocksLockedPaddingAfter: array[0..128-SizeOf(TSynchronizationVariable)-1] of Byte;
-    {$ENDIF}
-  end;
+  LargeBlocksLocked: TSynchronizationVariable;
 
 {$IFDEF LargeBlocksLockedCriticalSection}
   LargeBlocksLockedCS: TRTLCriticalSection;
@@ -3729,7 +3700,7 @@ end;
 {$IFDEF FPC}
 function GetMediumBlocksLockedPointer: PByte;
 begin
-  Result := @MediumBlocksLock.MediumBlocksLocked;
+  Result := @MediumBlocksLocked;
 end;
 {$ENDIF}
 
@@ -3751,7 +3722,7 @@ asm
    call GetMediumBlocksLockedPointer
    mov  r8, rax
    {$ELSE}
-   lea  r8, MediumBlocksLock.MediumBlocksLocked
+   lea  r8, MediumBlocksLocked
    {$ENDIF}
 
    mov  eax, cLockByteLocked
@@ -3871,9 +3842,9 @@ asm
    jz   @SwitchToThreadPause32
    db   $F3, $90 // pause
 @FirstComparePause32:
-   cmp  [MediumBlocksLock.MediumBlocksLocked], al
+   cmp  [MediumBlocksLocked], al
    je   @NormalLoadLoopPause32
-   lock xchg [MediumBlocksLock.MediumBlocksLocked], al
+   lock xchg [MediumBlocksLocked], al
    cmp  al, cLockByteLocked
    je   @DidntLockPause32
    jmp	@Finish32Bit
@@ -7770,7 +7741,7 @@ begin
   begin
     for LIndC := 0 to NumSmallBlockTypes - 1 do
     begin
-      while not AcquireLockByte(SmallBlocks.SmallBlockTypes[LIndC].SmallBlockTypeLocked) do
+      while not AcquireLockByte(SmallBlockTypes[LIndC].SmallBlockTypeLocked) do
       begin
 {$IFDEF NeverSleepOnThreadContention}
   {$IFDEF UseSwitchToThread}
@@ -7778,7 +7749,7 @@ begin
   {$ENDIF}
 {$ELSE}
         Sleep(InitialSleepTime);
-        if AcquireLockByte(SmallBlocks.SmallBlockTypes[LIndC].SmallBlockTypeLocked) then
+        if AcquireLockByte(SmallBlockTypes[LIndC].SmallBlockTypeLocked) then
           Break;
         Sleep(AdditionalSleepTime);
 {$ENDIF}
@@ -7905,10 +7876,10 @@ begin
     {$IFNDEF DisablePauseAndSwitchToThread}
     if CpuFeaturePauseAndSwitch then
     begin
-      if not AcquireLockByte(MediumBlocksLock.MediumBlocksLocked) then
+      if not AcquireLockByte(MediumBlocksLocked) then
       begin
         Result := True;
-        AcquireSpinLockByte(MediumBlocksLock.MediumBlocksLocked);
+        AcquireSpinLockByte(MediumBlocksLocked);
       end;
     end else
     {$ENDIF}
@@ -7916,7 +7887,7 @@ begin
       EnterCriticalSection(MediumBlocksLockedCS);
     end
   {$ELSE MediumBlocksLockedCriticalSection}
-    while not AcquireLockByte(MediumBlocksLock.MediumBlocksLocked) do
+    while not AcquireLockByte(MediumBlocksLocked) do
     begin
       Result := True; // had contention
   {$IFDEF UseReleaseStack}
@@ -7937,7 +7908,7 @@ begin
   {$ENDIF}
   {$ELSE}
       Sleep(InitialSleepTime);
-      if AcquireLockByte(MediumBlocksLock.MediumBlocksLocked) then
+      if AcquireLockByte(MediumBlocksLocked) then
         Break;
       Sleep(AdditionalSleepTime);
   {$ENDIF}
@@ -7966,7 +7937,7 @@ asm
 @MediumBlockLockLoop:
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to lock the medium blocks}
-  lock    cmpxchg MediumBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
+  lock    cmpxchg MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
   je      @DoneNoContention
 {$IFDEF NeverSleepOnThreadContention}
   {Pause instruction (improves performance on P4)}
@@ -7991,7 +7962,7 @@ asm
   {Try again}
   mov     eax, (cLockbyteLocked shl 8) or cLockByteAvailable
   {Attempt to grab the block type}
-  lock    cmpxchg MediumBlocksLock.MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
+  lock    cmpxchg MediumBlocksLocked, ah  // cmpxchg also uses AL as an implicit operand
   je      @DoneWithContention
   {Couldn't lock the medium blocks - sleep and try again}
   push    ecx
@@ -8020,13 +7991,13 @@ begin
   {$IFDEF MediumBlocksLockedCriticalSection}
   if CpuFeaturePauseAndSwitch then
   begin
-    ReleaseLockByte(MediumBlocksLock.MediumBlocksLocked);
+    ReleaseLockByte(MediumBlocksLocked);
   end else
   begin
     LeaveCriticalSection(MediumBlocksLockedCS);
   end;
   {$ELSE}
-  ReleaseLockByte(MediumBlocksLock.MediumBlocksLocked);
+  ReleaseLockByte(MediumBlocksLocked);
   {$ENDIF}
 end;
 
@@ -8559,10 +8530,10 @@ begin
   {$IFNDEF DisablePauseAndSwitchToThread}
   if CpuFeaturePauseAndSwitch then
   begin
-    if not AcquireLockByte(LargeBlocksLock.LargeBlocksLocked) then
+    if not AcquireLockByte(LargeBlocksLocked) then
     begin
       Result := True;
-      AcquireSpinLockByte(LargeBlocksLock.LargeBlocksLocked);
+      AcquireSpinLockByte(LargeBlocksLocked);
     end;
   end else
   {$ENDIF}
@@ -8570,7 +8541,7 @@ begin
     EnterCriticalSection(LargeBlocksLockedCS);
   end;
 {$ELSE LargeBlocksLockedCriticalSection}
-  while not AcquireLockByte(LargeBlocksLock.LargeBlocksLocked) do
+  while not AcquireLockByte(LargeBlocksLocked) do
   begin
     Result := True;
 {$IFDEF UseReleaseStack}
@@ -8591,7 +8562,7 @@ begin
 {$ENDIF}
 {$ELSE}
     Sleep(InitialSleepTime);
-    if AcquireLockByte(LargeBlocksLock.LargeBlocksLocked) then
+    if AcquireLockByte(LargeBlocksLocked) then
       Break;
     Sleep(AdditionalSleepTime);
 {$ENDIF}
@@ -8609,13 +8580,13 @@ begin
   {$IFDEF LargeBlocksLockedCriticalSection}
   if CpuFeaturePauseAndSwitch then
   begin
-    ReleaseLockByte(LargeBlocksLock.LargeBlocksLocked);
+    ReleaseLockByte(LargeBlocksLocked);
   end else
   begin
     LeaveCriticalSection(LargeBlocksLockedCS);
   end;
   {$ELSE}
-  ReleaseLockByte(LargeBlocksLock.LargeBlocksLocked);
+  ReleaseLockByte(LargeBlocksLocked);
   {$ENDIF}
 end;
 
@@ -9258,7 +9229,7 @@ begin
       {$ENDIF}
     {$ENDIF}
     ;
-    LPSmallBlockType := PSmallBlockType(LBlockTypeOffset+UIntPtr(@SmallBlocks.SmallBlockTypes[0]));
+    LPSmallBlockType := PSmallBlockType(LBlockTypeOffset+UIntPtr(@SmallBlockTypes[0]));
 {$IFDEF UseReleaseStack}
     LPReleaseStack := @LPSmallBlockType.ReleaseStack[GetStackSlot];
     if (not LPReleaseStack^.IsEmpty) and LPReleaseStack^.Pop(Result) then
@@ -9329,7 +9300,7 @@ begin
       end else
       {$ENDIF}
       begin
-        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlocks.SmallBlockTypes))
+        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@SmallBlockTypes))
           {$IFDEF SmallBlockTypeRecSizeIsPowerOf2}
             shr SmallBlockTypeRecSizePowerOf2
           {$ELSE}
@@ -9873,7 +9844,7 @@ like IsMultithreaded or MediumBlocksLocked}
   ja @NotASmallBlock
   {Get the small block type in ebx}
   movzx eax, byte ptr [AllocSz2SmlBlkTypOfsDivSclFctr + edx]
-  lea ebx, [SmallBlocks.SmallBlockTypes + eax * MaximumCpuScaleFactor]
+  lea ebx, [SmallBlockTypes + eax * MaximumCpuScaleFactor]
   {Do we need to lock the block type?}
 {$IFNDEF AssumeMultiThreaded}
   test ebp, (UnsignedBit shl StateBitMultithreaded)
@@ -10233,7 +10204,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlMedBlksAftrAllocNewSeqFd:
@@ -10264,7 +10235,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10387,7 +10358,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10455,7 +10426,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlMedBlkAftrGotMedBlkForMedium:
@@ -10541,7 +10512,7 @@ asm
 
   {Preload the addresses of some small block structures}
   lea r8, AllocSize2SmallBlockTypesIdx
-  lea rbx, SmallBlocks.SmallBlockTypes
+  lea rbx, SmallBlockTypes
   {Is it a small block?}
   cmp rcx, (MaximumSmallBlockSize - BlockHeaderSize)
   ja @NotASmallBlock
@@ -10940,7 +10911,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @UnlockSmallBlockAndExit
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -10969,7 +10940,7 @@ but we rely on nonvolatile (callee-saved) registers ( RBX, RBP, RDI, RSI, R12)}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -11094,7 +11065,7 @@ but we don't need them at this point - we only save RAX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -11170,7 +11141,7 @@ but we don't need them at this point - we only save RAX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -11570,7 +11541,7 @@ begin
       {$ENDIF}
       begin
         LFailedToAcquireLock := not AcquireLockByte(LPSmallBlockType^.SmallBlockTypeLocked);
-        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@(SmallBlocks.SmallBlockTypes[0])))
+        LSmallBlockCriticalSectionIndex := (NativeUint(LPSmallBlockType)-NativeUint(@(SmallBlockTypes[0])))
           {$IFDEF SmallBlockTypeRecSizeIsPowerOf2}
             shr SmallBlockTypeRecSizePowerOf2
           {$ELSE}
@@ -12139,7 +12110,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlckMedBlksAftrBinFrMedBlk:
@@ -12199,7 +12170,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
@@ -12252,7 +12223,7 @@ By default, it will not be compiled into FastMM4-AVX which uses more efficient a
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
 @DontUnlckMedBlksAftrMkEmptMedPlSeqFd:
@@ -12721,7 +12692,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   xor eax, eax
   jmp @Done
@@ -12781,7 +12752,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNodot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
 @DontUnlckMedBlcksAftrEntireMedPlFre:
@@ -12831,7 +12802,7 @@ but we don't need them at this point}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   xor eax, eax
   jmp @Done
@@ -13655,7 +13626,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit4Reg
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -13820,7 +13791,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
   jmp @Exit4Reg
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 8{$ENDIF}
@@ -13840,7 +13811,7 @@ asm
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
@@ -14266,7 +14237,7 @@ but we don't need them at this point, since we are about to exit}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -14435,7 +14406,7 @@ but we don't need them at this point, since we are about to exit}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   jmp @Done
@@ -14460,7 +14431,7 @@ so ew save RCX and RDX}
 {$IFDEF InterlockedRelease}
   lock
 {$ENDIF}
-  mov MediumBlocksLock.MediumBlocksLocked, cLockByteAvailable
+  mov MediumBlocksLocked, cLockByteAvailable
 {$ENDIF}
 
   {$IFDEF AsmCodeAlign}{$IFDEF AsmAlNoDot}align{$ELSE}.align{$ENDIF} 4{$ENDIF}
@@ -17163,7 +17134,7 @@ begin
     {Unlock all the small block types}
     for LInd := 0 to NumSmallBlockTypes - 1 do
     begin
-      ReleaseLockByte(SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked);
+      ReleaseLockByte(SmallBlockTypes[LInd].SmallBlockTypeLocked);
     end;
   end;
 {$IFNDEF AssumeMultiThreaded}
@@ -17720,7 +17691,7 @@ var
     Dec(LSmallBlockSize, FullDebugBlockOverhead);
   {$ENDIF}
     {Get the block type index}
-    LBlockTypeIndex := (UIntPtr(APSmallBlockPool^.BlockType) - UIntPtr(@SmallBlocks.SmallBlockTypes[0]))
+    LBlockTypeIndex := (UIntPtr(APSmallBlockPool^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
 {$IFDEF SmallBlockTypeRecSizeIsPowerOf2}
       shr SmallBlockTypeRecSizePowerOf2
 {$ELSE}
@@ -17981,7 +17952,7 @@ begin
       {Step through all the small block types}
       for LBlockTypeInd := 0 to NumSmallBlockTypes - 1 do
       begin
-        LThisBlockSize := SmallBlocks.SmallBlockTypes[LBlockTypeInd].BlockSize - BlockHeaderSize;
+        LThisBlockSize := SmallBlockTypes[LBlockTypeInd].BlockSize - BlockHeaderSize;
   {$IFDEF FullDebugMode}
         if LThisBlockSize > FullDebugBlockOverhead then
         begin
@@ -18174,7 +18145,7 @@ begin
   {Set the small block size stats}
   for LInd := 0 to NumSmallBlockTypes - 1 do
   begin
-    LIndBlockSize := SmallBlocks.SmallBlockTypes[LInd].BlockSize;
+    LIndBlockSize := SmallBlockTypes[LInd].BlockSize;
     AMemoryManagerState.SmallBlockTypeStates[LInd].InternalBlockSize := LIndBlockSize;
     if LIndBlockSize > BlockHeaderSizeWithAnyOverhead then
     begin
@@ -18215,7 +18186,7 @@ begin
         if (LMediumBlockHeader and IsSmallBlockPoolInUseFlag) <> 0 then
         begin
           {Get the block type index}
-          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlocks.SmallBlockTypes[0]))
+          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
     {$IFDEF SmallBlockTypeRecSizeIsPowerOf2}
           shr SmallBlockTypeRecSizePowerOf2
     {$ELSE}
@@ -18256,7 +18227,7 @@ begin
   {Unlock all the small block types}
   for LInd := 0 to NumSmallBlockTypes - 1 do
   begin
-    ReleaseLockByte(SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked);
+    ReleaseLockByte(SmallBlockTypes[LInd].SmallBlockTypeLocked);
   end;
 {$IFNDEF AssumeMultiThreaded}
   if IsMultiThread then
@@ -18533,7 +18504,7 @@ begin
         if (LMediumBlockHeader and IsSmallBlockPoolInUseFlag) <> 0 then
         begin
           {Get the block type index}
-          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlocks.SmallBlockTypes[0]))
+          LBlockTypeIndex := (UIntPtr(PSmallBlockPoolHeader(LPMediumBlock)^.BlockType) - UIntPtr(@SmallBlockTypes[0]))
     {$IFDEF SmallBlockTypeRecSizeIsPowerOf2}
           shr SmallBlockTypeRecSizePowerOf2
     {$ELSE}
@@ -18542,7 +18513,7 @@ begin
           ;
           {Get the usage in the block}
           LSmallBlockUsage := PSmallBlockPoolHeader(LPMediumBlock)^.BlocksInUse
-            * SmallBlocks.SmallBlockTypes[LBlockTypeIndex].BlockSize;
+            * SmallBlockTypes[LBlockTypeIndex].BlockSize;
           {Get the total overhead for all the small blocks}
           LSmallBlockOverhead := PSmallBlockPoolHeader(LPMediumBlock)^.BlocksInUse
               * (BlockHeaderSize{$IFDEF FullDebugMode} + FullDebugBlockOverhead{$ENDIF});
@@ -18586,7 +18557,7 @@ begin
   {Unlock all the small block types}
   for LInd := 0 to NumSmallBlockTypes - 1 do
   begin
-    ReleaseLockByte(SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked);
+    ReleaseLockByte(SmallBlockTypes[LInd].SmallBlockTypeLocked);
   end;
 {$IFNDEF AssumeMultiThreaded}
   if IsMultiThread then
@@ -18669,14 +18640,14 @@ begin
     LPMediumBlockPoolHeader := LPNextMediumBlockPoolHeader;
   end;
   {Clear all small block types}
-  for LInd := Low(SmallBlocks.SmallBlockTypes) to High(SmallBlocks.SmallBlockTypes) do
+  for LInd := Low(SmallBlockTypes) to High(SmallBlockTypes) do
   begin
-    LPSmallBlockType := @(SmallBlocks.SmallBlockTypes[Lind]);
+    LPSmallBlockType := @(SmallBlockTypes[Lind]);
     LPSmallBlockPoolHeader := SmallBlockTypePtrToPoolHeaderPtr(LPSmallBlockType);
-    SmallBlocks.SmallBlockTypes[Lind].PreviousPartiallyFreePool := LPSmallBlockPoolHeader;
-    SmallBlocks.SmallBlockTypes[Lind].NextPartiallyFreePool := LPSmallBlockPoolHeader;
-    SmallBlocks.SmallBlockTypes[Lind].NextSequentialFeedBlockAddress := Pointer(1);
-    SmallBlocks.SmallBlockTypes[Lind].MaxSequentialFeedBlockAddress := nil;
+    SmallBlockTypes[Lind].PreviousPartiallyFreePool := LPSmallBlockPoolHeader;
+    SmallBlockTypes[Lind].NextPartiallyFreePool := LPSmallBlockPoolHeader;
+    SmallBlockTypes[Lind].NextSequentialFeedBlockAddress := Pointer(1);
+    SmallBlockTypes[Lind].MaxSequentialFeedBlockAddress := nil;
   end;
   {Clear all medium block pools}
   MediumBlockPoolsCircularList.PreviousMediumBlockPoolHeader := @MediumBlockPoolsCircularList;
@@ -18746,9 +18717,9 @@ begin
   LargeBlockCollector.GetData(mergedData, mergedCount);
   MediumBlockCollector.GetData(data, count);
   LargeBlockCollector.Merge(mergedData, mergedCount, data, count);
-  for i := 0 to High(SmallBlocks.SmallBlockTypes) do
+  for i := 0 to High(SmallBlockTypes) do
   begin
-    SmallBlocks.SmallBlockTypes[i].BlockCollector.GetData(data, count);
+    SmallBlockTypes[i].BlockCollector.GetData(data, count);
     LargeBlockCollector.Merge(mergedData, mergedCount, data, count);
   end;
 
@@ -18969,18 +18940,18 @@ begin
   end;
 
   LTotalSmall := 0;
-  for LInd := 0 to High(SmallBlocks.SmallBlockTypes) do begin
+  for LInd := 0 to High(SmallBlockTypes) do begin
     for LSlot := 0 to NumStacksPerBlock-1 do begin
-      GetBlockSizeForStack(SmallBlocks.SmallBlockTypes[LInd].ReleaseStack[LSlot], LSize, LCount);
+      GetBlockSizeForStack(SmallBlockTypes[LInd].ReleaseStack[LSlot], LSize, LCount);
       LSlotSize[LSlot] := LSize;
       LSlotCount[LSlot] := LCount;
       Inc(LTotalSmall, LSize);
     end;
     if LSmallBlocksLocked then
     begin
-      ReleaseLockByte(@SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked);
+      ReleaseLockByte(@SmallBlockTypes[LInd].SmallBlockTypeLocked);
     end;
-    AppendSlotInfo(SmallBlocks.SmallBlockTypes[LInd].BlockSize);
+    AppendSlotInfo(SmallBlockTypes[LInd].BlockSize);
   end;
 
   LMsgPtr := AppendStringToBuffer(ReleaseStackUsageTotalSmallBlocksMsg, LMsgPtr, Length(ReleaseStackUsageTotalSmallBlocksMsg));
@@ -19240,7 +19211,7 @@ var
 begin
   for i := 0 to NumSmallBlockTypes-1 do
   begin
-    SmallBlocks.SmallBlockTypes[i].BlockSize := SmallBlockTypeSizes[i];
+    SmallBlockTypes[i].BlockSize := SmallBlockTypeSizes[i];
   end;
 end;
 
@@ -19547,9 +19518,9 @@ ENDQUOTE}
 
   LPreviousBlockSize := 0;
 
-  for LInd := 0 to High(SmallBlocks.SmallBlockTypes) do
+  for LInd := 0 to High(SmallBlockTypes) do
   begin
-    SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteAvailable;
+    SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteAvailable;
 
 
 
@@ -19569,53 +19540,53 @@ ENDQUOTE}
     // even if we have Fast Short REP MOVSB, it is not as fast for sizes below 92 bytes under 32-bit
     if ((FastMMCpuFeaturesA and FastMMCpuFeatureSSE) <> 0) then
     begin
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
-        24: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move20_32bit_SSE;
-        32: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move28_32bit_SSE;
-        40: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move36_32bit_SSE;
-        48: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move44_32bit_SSE;
-        56: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move52_32bit_SSE;
-        64: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move60_32bit_SSE;
-        72: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move68_32bit_SSE;
-        80: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move76_32bit_SSE;
-        88: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move84_32bit_SSE;
-        96: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move92_32bit_SSE;
+      case SmallBlockTypes[LInd].BlockSize of
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move20_32bit_SSE;
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move28_32bit_SSE;
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move36_32bit_SSE;
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move44_32bit_SSE;
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move52_32bit_SSE;
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move60_32bit_SSE;
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move68_32bit_SSE;
+        80: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move76_32bit_SSE;
+        88: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move84_32bit_SSE;
+        96: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move92_32bit_SSE;
       end;
     end;
     {$ENDIF}
     {$ENDIF}
     {$ENDIF}
 
-    if not Assigned(SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure) then
+    if not Assigned(SmallBlockTypes[LInd].UpsizeMoveProcedure) then
     begin
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
+      case SmallBlockTypes[LInd].BlockSize of
         {$IFDEF 32bit}
-        8: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move4;
+        8: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move4;
         {$ENDIF}
         {$IFNDEF Align32Bytes}
-        16: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move12{$ELSE}Move8{$ENDIF};
+        16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move12{$ELSE}Move8{$ENDIF};
         {$IFNDEF Align16Bytes}
-        24: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move20{$ELSE}Move16{$ENDIF};
+        24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move20{$ELSE}Move16{$ENDIF};
         {$ENDIF Align16Bytes}
         {$ENDIF Align32Bytes}
 
-        32: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move28{$ELSE}Move24{$ENDIF};
+        32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move28{$ELSE}Move24{$ENDIF};
 
         {$IFNDEF Align32Bytes}
         {$IFNDEF Align16Bytes}
-        40: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move36{$ELSE}Move32{$ENDIF};
+        40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move36{$ELSE}Move32{$ENDIF};
         {$ENDIF}
-        48: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move44{$ELSE}Move40{$ENDIF};
+        48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move44{$ELSE}Move40{$ENDIF};
         {$IFNDEF Align16Bytes}
-        56: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move52{$ELSE}Move48{$ENDIF};
+        56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move52{$ELSE}Move48{$ENDIF};
         {$ENDIF}
         {$ENDIF}
 
-        64: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move60{$ELSE}Move56{$ENDIF};
+        64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32Bit}Move60{$ELSE}Move56{$ENDIF};
 
         {$IFNDEF Align32Bytes}
         {$IFNDEF Align16Bytes}
-        72: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move68{$ELSE}Move64{$ENDIF};
+        72: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}{$IFDEF 32bit}Move68{$ELSE}Move64{$ENDIF};
         {$ENDIF}
         {$ENDIF}
       end;
@@ -19628,25 +19599,25 @@ ENDQUOTE}
     begin
       // don't use any register copy if we have Fast Short REP MOVSB
       // Fast Short REP MOVSB is very fast under 64-bit
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
+      case SmallBlockTypes[LInd].BlockSize of
          {$IFNDEF Align32Bytes}
-         16: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move8;
+         16: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move8;
          {$IFNDEF Align16Bytes}
-         24: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move16;
+         24: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move16;
          {$ENDIF Align16Bytes}
          {$ENDIF Align32Bytes}
-         32: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24Reg64;
+         32: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24Reg64;
          {$IFNDEF Align32Bytes}
          {$IFNDEF Align16Bytes}
-         40: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move32Reg64;
+         40: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move32Reg64;
          {$ENDIF}
-         48: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move40Reg64;
+         48: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move40Reg64;
          {$IFNDEF Align16Bytes}
-         56: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move48Reg64;
+         56: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move48Reg64;
          {$ENDIF}
          {$ENDIF}
-         64: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56Reg64;
-         else  SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
+         64: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56Reg64;
+         else  SmallBlockTypes[LInd].UpsizeMoveProcedure := nil;
       end;
     end;
     {$ENDIF}
@@ -19663,18 +19634,18 @@ ENDQUOTE}
         {$IFDEF EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$ENDIF}
     then
     begin
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
-         32*01: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX512;
-         32*02: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX512;
-         32*03: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX512;
-         32*04: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX512;
-         32*05: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX512;
-         32*06: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX512;
-         32*07: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX512;
-         32*08: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move248AVX512;
-         32*09: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move280AVX512;
-         32*10: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move312AVX512;
-         32*11: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move344AVX512;
+      case SmallBlockTypes[LInd].BlockSize of
+         32*01: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX512;
+         32*02: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX512;
+         32*03: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX512;
+         32*04: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX512;
+         32*05: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX512;
+         32*06: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX512;
+         32*07: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX512;
+         32*08: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move248AVX512;
+         32*09: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move280AVX512;
+         32*10: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move312AVX512;
+         32*11: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move344AVX512;
       end;
     end else
   {$ENDIF}
@@ -19684,14 +19655,14 @@ ENDQUOTE}
       {$IFDEF EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$ENDIF}
     then
     begin
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX2;
-         32*2: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX2;
-         32*3: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX2;
-         32*4: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX2;
-         32*5: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX2;
-         32*6: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX2;
-         32*7: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX2;
+      case SmallBlockTypes[LInd].BlockSize of
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX2;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX2;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX2;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX2;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX2;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX2;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX2;
       end;
     end else
     {$ENDIF DisableAVX2}
@@ -19701,14 +19672,14 @@ ENDQUOTE}
       {$IFDEF EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$ENDIF}
       then
     begin
-      case SmallBlocks.SmallBlockTypes[LInd].BlockSize of
-         32*1: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX1;
-         32*2: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX1;
-         32*3: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX1;
-         32*4: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX1;
-         32*5: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX1;
-         32*6: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX1;
-         32*7: SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX1;
+      case SmallBlockTypes[LInd].BlockSize of
+         32*1: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move24AVX1;
+         32*2: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move56AVX1;
+         32*3: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move88AVX1;
+         32*4: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move120AVX1;
+         32*5: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move152AVX1;
+         32*6: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move184AVX1;
+         32*7: SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}Move216AVX1;
      end;
     end else
    {$ENDIF}
@@ -19718,7 +19689,7 @@ ENDQUOTE}
 {$ENDIF}
 {$ENDIF}
 
-    if not Assigned(SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure) then
+    if not Assigned(SmallBlockTypes[LInd].UpsizeMoveProcedure) then
   {$IFDEF UseCustomVariableSizeMoveRoutines}
     {$IFDEF Align32Bytes}
     {$IFDEF EnableAVX}
@@ -19731,21 +19702,21 @@ ENDQUOTE}
       {$IFNDEF DisableMoveX32LpAvx512}
         if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX512) <> 0) {$IFDEF EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$ENDIF} then
         begin
-          SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := MoveX32LpAvx512WithErms;
+          SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx512WithErms;
         end else
       {$ENDIF}
       {$ENDIF}
         begin
-          SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2WithErms;
+          SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2WithErms;
         end;
       end else
       begin
-        SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2NoErms;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx2NoErms;
       end;
     end else
     if ((FastMMCpuFeaturesA and FastMMCpuFeatureAVX1) <> 0) {$IFDEF EnableFSRM}and ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) = 0){$ENDIF} then
     begin
-      SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx1NoErms;
+      SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX32LpAvx1NoErms;
     end else
     {$ENDIF EnableAVX}
     begin
@@ -19754,11 +19725,11 @@ ENDQUOTE}
         {$IFDEF EnableFSRM}or ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) <> 0){$ENDIF}
       then
       begin
-        SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
       end else
       {$ENDIF}
       begin
-        SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP;
       end;
     end;
     {$ELSE Align32Bytes}
@@ -19768,32 +19739,32 @@ ENDQUOTE}
          {$IFDEF EnableFSRM}or ((FastMMCpuFeaturesA and FastMMCpuFeatureFSRM) <> 0){$ENDIF}
       then
       begin
-        SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveWithErmsNoAVX;
       end
       else
       {$ENDIF EnableERMS}
       {$ENDIF USE_CPUID}
       begin
-        SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP
+        SmallBlockTypes[LInd].UpsizeMoveProcedure := {$IFDEF FPC}@{$ENDIF}MoveX16LP
       end;
       ;
     {$ENDIF Align32Bytes}
   {$ELSE UseCustomVariableSizeMoveRoutines}
-      SmallBlocks.SmallBlockTypes[LInd].UpsizeMoveProcedure := @System.Move;
+      SmallBlockTypes[LInd].UpsizeMoveProcedure := @System.Move;
   {$ENDIF UseCustomVariableSizeMoveRoutines}
 {$ENDIF}
 {$IFDEF LogLockContention}
-    SmallBlocks.SmallBlockTypes[LInd].BlockCollector.Initialize;
+    SmallBlockTypes[LInd].BlockCollector.Initialize;
 {$ENDIF}
     {Set the first "available pool" to the block type itself, so that the
      allocation routines know that there are currently no pools with free
      blocks of this size.}
-    LPSmallBlockType := @(SmallBlocks.SmallBlockTypes[LInd]);
+    LPSmallBlockType := @(SmallBlockTypes[LInd]);
     LPSmallBlockPoolHeader := SmallBlockTypePtrToPoolHeaderPtr(LPSmallBlockType);
-    SmallBlocks.SmallBlockTypes[LInd].PreviousPartiallyFreePool := LPSmallBlockPoolHeader;
-    SmallBlocks.SmallBlockTypes[LInd].NextPartiallyFreePool := LPSmallBlockPoolHeader;
+    SmallBlockTypes[LInd].PreviousPartiallyFreePool := LPSmallBlockPoolHeader;
+    SmallBlockTypes[LInd].NextPartiallyFreePool := LPSmallBlockPoolHeader;
     {Set the block size to block type index translation table}
-    for LSizeInd := (LPreviousBlockSize div SmallBlockGranularity) to (NativeUInt(SmallBlocks.SmallBlockTypes[LInd].BlockSize - 1) shr SmallBlockGranularityPowerOf2) do
+    for LSizeInd := (LPreviousBlockSize div SmallBlockGranularity) to (NativeUInt(SmallBlockTypes[LInd].BlockSize - 1) shr SmallBlockGranularityPowerOf2) do
     begin
    {$IFDEF AllocSize2SmallBlockTypesPrecomputedOffsets}
       AllocSz2SmlBlkTypOfsDivSclFctr[LSizeInd] := LInd shl (SmallBlockTypeRecSizePowerOf2 - MaximumCpuScaleFactorPowerOf2);
@@ -19803,11 +19774,11 @@ ENDQUOTE}
     end;
     {Cannot sequential feed yet: Ensure that the next address is greater than
      the maximum address}
-    SmallBlocks.SmallBlockTypes[LInd].MaxSequentialFeedBlockAddress := Pointer(0);
-    SmallBlocks.SmallBlockTypes[LInd].NextSequentialFeedBlockAddress := Pointer(1);
+    SmallBlockTypes[LInd].MaxSequentialFeedBlockAddress := Pointer(0);
+    SmallBlockTypes[LInd].NextSequentialFeedBlockAddress := Pointer(1);
     {Get the mask to use for finding a medium block suitable for a block pool}
     LMinimumPoolSize :=
-      ((SmallBlocks.SmallBlockTypes[LInd].BlockSize * MinimumSmallBlocksPerPool
+      ((SmallBlockTypes[LInd].BlockSize * MinimumSmallBlocksPerPool
         + SmallBlockPoolHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset)
       and MediumBlockGranularityMask) + MediumBlockSizeOffset;
     if LMinimumPoolSize < MinimumMediumBlockSize then
@@ -19825,11 +19796,11 @@ ENDQUOTE}
 
     {Set the bitmap}
     LByte := Byte(UnsignedBit) shl LGroupNumber;
-    SmallBlocks.SmallBlockTypes[LInd].AllowedGroupsForBlockPoolBitmap := NegByteMaskBit(LByte);
+    SmallBlockTypes[LInd].AllowedGroupsForBlockPoolBitmap := NegByteMaskBit(LByte);
     {Set the minimum pool size}
-    SmallBlocks.SmallBlockTypes[LInd].MinimumBlockPoolSize := MinimumMediumBlockSize + (LGroupNumber shl (MediumBlockGranularityPowerOf2 + MediumBlockBinsPerGroupPowerOf2));
+    SmallBlockTypes[LInd].MinimumBlockPoolSize := MinimumMediumBlockSize + (LGroupNumber shl (MediumBlockGranularityPowerOf2 + MediumBlockBinsPerGroupPowerOf2));
     {Get the optimal block pool size}
-    LOptimalPoolSize := ((SmallBlocks.SmallBlockTypes[LInd].BlockSize * TargetSmallBlocksPerPool
+    LOptimalPoolSize := ((SmallBlockTypes[LInd].BlockSize * TargetSmallBlocksPerPool
         + SmallBlockPoolHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset)
       and MediumBlockGranularityMask) + MediumBlockSizeOffset;
     {Limit the optimal pool size to within range}
@@ -19842,19 +19813,19 @@ ENDQUOTE}
       LOptimalPoolSize := OptimalSmallBlockPoolSizeUpperLimit;
     end;
     {How many blocks will fit in the adjusted optimal size?}
-    LBlocksPerPool := (LOptimalPoolSize - SmallBlockPoolHeaderSize) div SmallBlocks.SmallBlockTypes[LInd].BlockSize;
+    LBlocksPerPool := (LOptimalPoolSize - SmallBlockPoolHeaderSize) div SmallBlockTypes[LInd].BlockSize;
     {Recalculate the optimal pool size to minimize wastage due to a partial
      last block.}
-    SmallBlocks.SmallBlockTypes[LInd].OptimalBlockPoolSize :=
-      ((LBlocksPerPool * SmallBlocks.SmallBlockTypes[LInd].BlockSize + SmallBlockPoolHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset) and MediumBlockGranularityMask) + MediumBlockSizeOffset;
+    SmallBlockTypes[LInd].OptimalBlockPoolSize :=
+      ((LBlocksPerPool * SmallBlockTypes[LInd].BlockSize + SmallBlockPoolHeaderSize + MediumBlockGranularity - 1 - MediumBlockSizeOffset) and MediumBlockGranularityMask) + MediumBlockSizeOffset;
 {$IFDEF UseReleaseStack}
     for LSlot := 0 to NumStacksPerBlock - 1 do
-      SmallBlocks.SmallBlockTypes[LInd].ReleaseStack[LSlot].Initialize(ReleaseStackSize, SizeOf(Pointer));
+      SmallBlockTypes[LInd].ReleaseStack[LSlot].Initialize(ReleaseStackSize, SizeOf(Pointer));
 {$ENDIF}
 {$IFDEF CheckHeapForCorruption}
     {Debug checks}
-    if (SmallBlocks.SmallBlockTypes[LInd].OptimalBlockPoolSize < MinimumMediumBlockSize)
-      or ((SmallBlocks.SmallBlockTypes[LInd].BlockSize shr SmallBlockGranularityPowerOf2) shl SmallBlockGranularityPowerOf2 <> SmallBlocks.SmallBlockTypes[LInd].BlockSize) then
+    if (SmallBlockTypes[LInd].OptimalBlockPoolSize < MinimumMediumBlockSize)
+      or ((SmallBlockTypes[LInd].BlockSize shr SmallBlockGranularityPowerOf2) shl SmallBlockGranularityPowerOf2 <> SmallBlockTypes[LInd].BlockSize) then
     begin
   {$IFDEF BCB6OrDelphi7AndUp}
       System.Error(reInvalidPtr);
@@ -19864,12 +19835,12 @@ ENDQUOTE}
     end;
 {$ENDIF}
     {Set the previous small block size}
-    LPreviousBlockSize := SmallBlocks.SmallBlockTypes[LInd].BlockSize;
+    LPreviousBlockSize := SmallBlockTypes[LInd].BlockSize;
   end;
 
   {-------------------Set up the medium blocks-------------------}
 
-  MediumBlocksLock.MediumBlocksLocked := CLockByteAvailable;
+  MediumBlocksLocked := CLockByteAvailable;
   {$IFDEF MediumBlocksLockedCriticalSection}
   {$IFDEF fpc}InitCriticalSection{$ELSE}InitializeCriticalSection{$ENDIF}(MediumBlocksLockedCS);
   {$ENDIF}
@@ -19898,7 +19869,7 @@ ENDQUOTE}
     LPMediumFreeBlock^.NextFreeBlock := LPMediumFreeBlock;
   end;
   {------------------Set up the large blocks---------------------}
-  LargeBlocksLock.LargeBlocksLocked := CLockByteAvailable;
+  LargeBlocksLocked := CLockByteAvailable;
   {$IFDEF LargeBlocksLockedCriticalSection}
   {$IFDEF fpc}InitCriticalSection{$ELSE}InitializeCriticalSection{$ENDIF}(LargeBlocksLockedCS);
   {$ENDIF}
@@ -20210,14 +20181,14 @@ var
   LMemory: Pointer;
   LSlot: Integer;
 begin
-  for LInd := 0 to High(SmallBlocks.SmallBlockTypes) do begin
+  for LInd := 0 to High(SmallBlockTypes) do begin
     for LSlot := 0 to NumStacksPerBlock-1 do
-      while SmallBlocks.SmallBlockTypes[LInd].ReleaseStack[LSlot].Pop(LMemory) do
+      while SmallBlockTypes[LInd].ReleaseStack[LSlot].Pop(LMemory) do
         FastFreeMem(LMemory);
     {Finalize all stacks only after all memory for this block has been freed.}
     {Otherwise, FastFreeMem could try to access a stack that was already finalized.}
     for LSlot := 0 to NumStacksPerBlock-1 do
-      SmallBlocks.SmallBlockTypes[LInd].ReleaseStack[LSlot].Finalize;
+      SmallBlockTypes[LInd].ReleaseStack[LSlot].Finalize;
   end;
   for LSlot := 0 to NumStacksPerBlock-1 do
   begin
@@ -20244,7 +20215,7 @@ begin
     for LSlot := 0 to NumStacksPerBlock - 1 do
     begin
       if (not MediumReleaseStack[LSlot].IsEmpty)
-        and (AcquireLockByte(MediumBlocksLock.MediumBlocksLocked)) then
+        and (AcquireLockByte(MediumBlocksLocked)) then
       begin
         if MediumReleaseStack[LSlot].Pop(LMemBlock) then
           FreeMediumBlock(LMemBlock, True)
@@ -20254,7 +20225,7 @@ begin
         end;
       end;
       if (not LargeReleaseStack[LSlot].IsEmpty)
-        and (AcquireLockByte(LargeBlocksLock.LargeBlocksLocked)) then
+        and (AcquireLockByte(LargeBlocksLocked)) then
       begin
         if LargeReleaseStack[LSlot].Pop(LMemBlock) then
           FreeLargeBlock(LMemBlock, True)
@@ -20382,12 +20353,12 @@ begin
     end;
 
   {$IFDEF MediumBlocksLockedCriticalSection}
-  LargeBlocksLock.LargeBlocksLocked := CLockByteFinished;
+  LargeBlocksLocked := CLockByteFinished;
   {$IFDEF fpc}DoneCriticalSection{$ELSE}DeleteCriticalSection{$ENDIF}(MediumBlocksLockedCS);
   {$ENDIF MediumBlocksLockedCriticalSection}
 
   {$IFDEF LargeBlocksLockedCriticalSection}
-  LargeBlocksLock.LargeBlocksLocked := CLockByteFinished;
+  LargeBlocksLocked := CLockByteFinished;
   {$IFDEF fpc}DoneCriticalSection{$ELSE}DeleteCriticalSection{$ENDIF}(LargeBlocksLockedCS);
   {$ENDIF LargeBlocksLockedCriticalSection}
 
@@ -20400,9 +20371,9 @@ begin
     end;
   end;
 
-  for LInd := Low(SmallBlocks.SmallBlockTypes) to High(SmallBlocks.SmallBlockTypes) do
+  for LInd := Low(SmallBlockTypes) to High(SmallBlockTypes) do
   begin
-    SmallBlocks.SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteFinished;
+    SmallBlockTypes[LInd].SmallBlockTypeLocked := CLockByteFinished;
   end;
   {$ENDIF}
 
@@ -20591,48 +20562,11 @@ end;
 {$ENDIF}
 
 
-{$IFDEF EnableWaitPKG}
-
-procedure ShowErrorBox({$IFNDEF NoMessageBoxes}const AMsg: PAnsiChar{$ENDIF});
-{$IFNDEF NoMessageBoxes}
-var
-  LErrorMessageTitle: array[0..MaxDisplayMessageLength-1] of AnsiChar;
-{$ENDIF}
-begin
-{$IFNDEF NoMessageBoxes}
-  FillChar(LErrorMessageTitle, SizeOf(LErrorMessageTitle), 0);
-  AppendStringToModuleName(InvalidOperationTitle, LErrorMessageTitle, Length(InvalidOperationTitle), (SizeOf(LErrorMessageTitle) div SizeOf(LErrorMessageTitle[0])-1));
-  ShowMessageBox(AMsg, LErrorMessageTitle);
-{$ENDIF}
-  {Raise an access violation}
-  RaiseException(EXCEPTION_ACCESS_VIOLATION, 0, 0, nil);
-end;
-
-procedure CheckAlignment;
-var
-  p: Pointer;
-  i: NativeUInt;
-begin
-  p := @(SmallBlocks.SmallBlockTypes);
-  i := NativeUInt(p);
-  if (i and $7F) <> 0 then ShowErrorBox({$IFNDEF NoMessageBoxes}'SmallBlocks.SmallBlockTypes are not aligned'{$ENDIF});
-  p := @(MediumBlocksLock.MediumBlocksLocked);
-  i := NativeUInt(p);
-  if (i and $FF) <> 0 then ShowErrorBox({$IFNDEF NoMessageBoxes}'MediumBlocksLock.MediumBlocksLocked is not aligned'{$ENDIF});
-  p := @(LargeBlocksLock.LargeBlocksLocked);
-  i := NativeUInt(p);
-  if (i and $FF) <> 0 then ShowErrorBox({$IFNDEF NoMessageBoxes}'LargeBlocksLock.LargeBlocksLocked is not aligned'{$ENDIF});
-end;
-{$ENDIF}
-
 procedure RunInitializationCode;
 begin
   {Only run this code once during startup.}
   if InitializationCodeHasRun then
     Exit;
-{$IFDEF EnableWaitPKG}
-  CheckAlignment;
-{$ENDIF}
 {$IFNDEF BCB}
 {$IFDEF DEBUG}
   SelfTest;

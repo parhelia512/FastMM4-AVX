@@ -51,7 +51,6 @@ begin
   {Clear all the block sizes}
   FillChar(BlockSizes^, NumPointers*SizeOf(Integer), 0);
 
-
   {Do the benchmark}
   FIterCount := 50000*1000;
   for i := 1 to FIterCount do
@@ -90,7 +89,6 @@ begin
   FreeMem(BlockSizes, NumPointers*SizeOf(Integer));
 end;
 
-
 type
   TBenchmarkThread = class(TThread)
     procedure Execute; override;
@@ -103,6 +101,7 @@ end;
 
 const
   CDefaultNumThreads = 12;
+  CCreateSuspendedThread = True;
 
 var
   VNumThreads: Integer;
@@ -145,18 +144,17 @@ begin
     GetFastMMCpuUserModeMonitorLineSizes(LFastMMCpuSmallestMonitorLineSize, LFastMMCpuLargestMonitorLineSize);
     WriteLn('Smallest monitor line size = ', LFastMMCpuSmallestMonitorLineSize);
     WriteLn('Largest monitor line size = ', LFastMMCpuLargestMonitorLineSize);
-
   end else
   begin
     WriteLn('Wait PKG is not supported')
   end;
   for i := Low(LThreads) to High(LThreads) do
   begin
-    LThreads[i] := TBenchmarkThread.Create(True);
+    LThreads[i] := TBenchmarkThread.Create(CCreateSuspendedThread);
   end;
   for i := Low(LThreads) to High(LThreads) do
   begin
-    LThreads[i].Resume;
+    LThreads[i].Suspended := False;
   end;
   for i := Low(LThreads) to High(LThreads) do
   begin
