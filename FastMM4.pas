@@ -1705,6 +1705,13 @@ of just one option: "Boolean short-circuit evaluation".}
 {$define Use_GetEnabledXStateFeatures_WindowsAPICall}
 {$ENDIF}
 
+
+
+{$IFDEF unix}
+{$unded EnableAVX512} // AVX-512 is not yet implemented for UNIX
+{$ENDIF unix}
+
+
 {$IFDEF 32bit}
 {$define AuxAsmRoutines}
 {$ENDIF}
