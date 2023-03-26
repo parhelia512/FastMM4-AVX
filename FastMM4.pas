@@ -1705,6 +1705,9 @@ of just one option: "Boolean short-circuit evaluation".}
 {$define Use_GetEnabledXStateFeatures_WindowsAPICall}
 {$ENDIF}
 
+{$IFNDEF 64bit}
+{$undef EnableAVX512} // AVX-512 is only implemented in 64-bit
+{$ENDIF}
 
 
 {$IFDEF unix}
@@ -4379,9 +4382,6 @@ end;
 
 {$IFDEF EnableAVX}
 
-
-
-
 {$IFNDEF DisableAVX1}
 
 {----------------------------AVX1 Move Procedures----------------------------}
@@ -6854,6 +6854,7 @@ end;
 {$ENDIF EnableERMS}
 
 
+{$IFDEF 64bit}
 {$IFDEF EnableAVX512}
 {$IFNDEF DisableMoveX32LpAvx512}
 procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); external;
@@ -6866,7 +6867,7 @@ procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); 
 
 {$L FastMM4_AVX512.obj}
 {$ENDIF}
-
+{$ENDIF}
 
 {$IFDEF Align32Bytes}
 procedure MoveX32LpUniversal(const ASource; var ADest; ACount: NativeInt);
@@ -6887,6 +6888,7 @@ begin
     {$IFDEF EnableERMS}
     if (F and FastMMCpuFeatureERMS) <> 0 then
     begin
+      {$IFDEF 64bit}
       {$IFDEF EnableAVX512}
       {$IFNDEF DisableMoveX32LpAvx512}
       if (F and FastMMCpuFeatureAVX512) <> 0 then
@@ -6894,6 +6896,7 @@ begin
         MoveX32LpAvx512WithErms(ASource, ADest, ACount)
       end
       else
+      {$ENDIF}
       {$ENDIF}
       {$ENDIF}
       begin
