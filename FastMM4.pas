@@ -5011,7 +5011,9 @@ asm
   mov [edx], eax
 {$ELSE 32Bit}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   mov eax, [rcx]
   mov [rdx], eax
   {$ELSE unix}
@@ -5025,7 +5027,9 @@ end;
 procedure Move8(const ASource; var ADest; ACount: NativeInt); assembler; {$IFDEF fpc64bit} nostackframe; {$ENDIF}
 asm
 {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   mov rax, [rcx]
   mov [rdx], rax
 {$ELSE}
@@ -5037,7 +5041,9 @@ end;
 procedure Move16(const ASource; var ADest; ACount: NativeInt); assembler; {$IFDEF fpc64bit} nostackframe; {$ENDIF}
 asm
 {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   mov rax, [rcx]
   mov rcx, [rcx+8]
   mov [rdx], rax
@@ -5055,7 +5061,9 @@ procedure Move32(const ASource; var ADest; ACount: NativeInt); assembler; {$IFDE
 asm
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-  .noframe
+    {$IFDEF AllowAsmNoframe}
+    .noframe
+    {$ENDIF}
     movdqa xmm0, [rcx]
     movdqa xmm1, [rcx+16]
     movdqa [rdx], xmm0
@@ -5068,7 +5076,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-  .noframe
+    {$IFDEF AllowAsmNoframe}
+    .noframe
+    {$ENDIF}
     movdqu xmm0, [rcx]
     movdqu xmm1, [rcx+16]
     movdqu [rdx], xmm0
@@ -5097,7 +5107,9 @@ asm
   mov [edx + 8], eax
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   mov rax, [rcx]
   mov ecx, [rcx + 8]
   mov [rdx], rax
@@ -5146,7 +5158,9 @@ asm
 {$ELSE}
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   mov ecx, [rcx + 16]
   movdqa [rdx], xmm0
@@ -5159,7 +5173,9 @@ asm
   {$ENDIF}
 {$ELSE AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   mov ecx, [rcx + 16]
   movdqu [rdx], xmm0
@@ -5260,7 +5276,9 @@ asm
 
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   mov r8, [rcx + 16]
   mov ecx, [rcx + 24]
@@ -5277,7 +5295,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   mov r8, [rcx + 16]
   mov ecx, [rcx + 24]
@@ -5337,7 +5357,9 @@ asm
 
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   mov ecx, [rcx + 32]
@@ -5354,7 +5376,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   mov ecx, [rcx + 32]
@@ -5380,7 +5404,9 @@ procedure Move40(const ASource; var ADest; ACount: NativeInt); assembler; {$IFDE
 asm
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   mov r8, [rcx + 32]
@@ -5397,7 +5423,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   mov r8, [rcx + 32]
@@ -5421,7 +5449,9 @@ procedure Move48(const ASource; var ADest; ACount: NativeInt); assembler; {$IFDE
 asm
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   movdqa xmm2, [rcx + 32]
@@ -5438,7 +5468,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   movdqu xmm2, [rcx + 32]
@@ -5505,7 +5537,9 @@ asm
 
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   mov r8, [rcx + 32]
@@ -5526,7 +5560,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   mov r8, [rcx + 32]
@@ -5600,7 +5636,9 @@ asm
 {$ELSE}
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   movdqa xmm2, [rcx + 32]
@@ -5621,7 +5659,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   movdqu xmm2, [rcx + 32]
@@ -5816,7 +5856,9 @@ asm
 {$ELSE}
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   movdqa xmm2, [rcx + 32]
@@ -5841,7 +5883,9 @@ asm
   {$ENDIF}
 {$ELSE}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   movdqu xmm2, [rcx + 32]
@@ -5928,7 +5972,9 @@ asm
 {$ELSE 32Bit}
 {$IFDEF AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqa xmm0, [rcx]
   movdqa xmm1, [rcx + 16]
   movdqa xmm2, [rcx + 32]
@@ -5953,7 +5999,9 @@ asm
   {$ENDIF}
 {$ELSE AlignAtLeast16Bytes}
   {$IFNDEF unix}
-.noframe
+  {$IFDEF AllowAsmNoframe}
+  .noframe
+  {$ENDIF}
   movdqu xmm0, [rcx]
   movdqu xmm1, [rcx + 16]
   movdqu xmm2, [rcx + 32]
