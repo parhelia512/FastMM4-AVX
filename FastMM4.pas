@@ -7665,8 +7665,7 @@ begin
         Result := AppendStringToBuffer(FirstUnitNameChar, Result, Length(LPUnitName^), ADestinationBufferLengthChars)
       else // Pos does no memory allocations, so it is safe to use
       begin // Skip the '@', then copy until the ':' - never seen this happen in Delphi, but might be a C++ thing
-        Result := AppendStringToBuffer(@(LPUnitName^[2]), Result, Pos(ShortString(':'), LPUnitName^) - 2, ADestinationBufferLengthChars)
-        ;
+        Result := AppendStringToBuffer(@(LPUnitName^[2]), Result, Pos(ShortString(':'), LPUnitName^) - 2, ADestinationBufferLengthChars);
       end;
       // dot between unit name and class name:
       Result := AppendStringToBuffer('.', Result, Length('.'), ADestinationBufferLengthChars);
@@ -16665,7 +16664,7 @@ begin
 end;
 {$ENDIF}
 
-{$ENDIF}
+{$ENDIF _EventLog}
 
 {----------------------------Memory Leak Checking-----------------------------}
 
