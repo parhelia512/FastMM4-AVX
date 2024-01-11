@@ -16,7 +16,7 @@ jobs:
     runs-on: self-hosted-linux
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Compile a simple demo in ObjFPC mode
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC -Tlinux -Px86_64 -O4 SimpleTest.dpr
@@ -111,7 +111,7 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
