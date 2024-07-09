@@ -20401,9 +20401,9 @@ begin
       ReportLockContention;
 {$ENDIF}
 {$IFNDEF NeverUninstall}
-      {$IF Defined( FullDebugMode ) AND Defined( LoadDebugDLLDynamically )}
-      FullDebugModeUnload;
-      {$IFEND}
+//     {$IF Defined( FullDebugMode ) AND Defined( LoadDebugDLLDynamically )}
+//     FullDebugModeUnload;
+//     {$IFEND}
 
       {Clean up: Free all memory. If this is a .DLL that owns its own MM, then
        it is necessary to prevent the main application from running out of

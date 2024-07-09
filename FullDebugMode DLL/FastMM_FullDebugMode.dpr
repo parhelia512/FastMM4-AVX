@@ -1,6 +1,5 @@
 {
-
-Fast Memory Manager: FullDebugMode Support DLL 1.64
+Fast Memory Manager: FullDebugMode Support DLL 1.65
 
 Description:
  Support DLL for FastMM. With this DLL available, FastMM will report debug info (unit name, line numbers, etc.) for
@@ -71,11 +70,14 @@ time.}
 library FastMM_FullDebugMode;
 
 uses
-  {$ifdef JCLDebug}JCLDebug,{$endif}
+  {$ifdef JCLDebug}
+    JCLDebug,
+    {$IF NOT Declared( AtomicCmpExchange )}SyncObjs,{$IFEND}
+  {$endif}
   {$ifdef madExcept}madStackTrace,{$endif}
   {$ifdef EurekaLog_Legacy}ExceptionLog,{$endif}
   {$ifdef EurekaLog_V7}EFastMM4Support,{$endif}
-  SysUtils, {$IFDEF MACOS}Posix.Base, SBMapFiles {$ELSE}Windows {$ENDIF};
+  SysUtils, {$IFDEF MACOS}Posix.Base, SBMapFiles{$ELSE}Windows{$ENDIF};
 
 {$R *.res}
 
@@ -774,8 +776,11 @@ begin
 end;
 
 var
-  LReturnAddressInfoCache: TReturnAddressInfoCache;
+  {$IF Declared( AtomicCmpExchange )}
   LLogStackTrace_Locked: Integer; //0 = unlocked, 1 = locked
+  {$ELSE}
+  LLogStackTrace_Locked : TCriticalSection;
+  {$IFEND}
 
 function LogStackTrace(AReturnAddresses: PNativeUInt; AMaxDepth: Cardinal; ABuffer: PAnsiChar): PAnsiChar;
 var
@@ -791,9 +796,13 @@ begin
 
   Result := ABuffer;
 
+  {$IF Declared( AtomicCmpExchange )}
   {This routine is protected by a lock - only one thread can be inside it at any given time.}
   while AtomicCmpExchange(LLogStackTrace_Locked, 1, 0) <> 0 do
-    Winapi.Windows.SwitchToThread;
+    SwitchToThread;
+  {$ELSE}
+  LLogStackTrace_Locked.Enter;
+  {$IFEND}
 
   try
     for LInd := 0 to AMaxDepth - 1 do
@@ -855,7 +864,11 @@ begin
       {$endif}
     end;
 
+    {$IF Declared( AtomicCmpExchange )}
     LLogStackTrace_Locked := 0;
+    {$ELSE}
+    LLogStackTrace_Locked.Leave;
+    {$IFEND}
   end;
 end;
 {$endif}
@@ -1105,6 +1118,10 @@ exports
 
 begin
 {$ifdef JCLDebug}
+  {$IF NOT Declared( AtomicCmpExchange )}
+  LLogStackTrace_Locked := TCriticalSection.Create;
+  {$IFEND}
+
 {$IF CompilerVersion < 23}
 {$IF defined( Win32 )} // Win32 or OSX32
   TestSSE := GetBriefSSEType;
@@ -1116,5 +1133,12 @@ begin
 
   JclStackTrackingOptions := JclStackTrackingOptions + [stAllModules];
 {$endif}
+
+//finalization
+//{$ifdef JCLDebug}
+//  {$IF NOT Declared( AtomicCmpExchange )}
+//  LLogStackTrace_Locked.free;
+//  {$IFEND}
+//{$endif}
 
 end.
