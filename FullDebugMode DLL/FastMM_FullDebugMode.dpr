@@ -1,4 +1,5 @@
 {
+
 Fast Memory Manager: FullDebugMode Support DLL 1.64
 
 Description:
@@ -48,6 +49,9 @@ Change log:
  Version 1.64 (27 February 2021)
   - Implemented a return address information cache that greatly speeds up the conversion of many similar stack traces
     to text.
+ Version 1.65 (10 July 2023)
+  - Made LogStackTrace thread safe.
+
 }
 
 {$IFDEF MSWINDOWS}
@@ -123,180 +127,132 @@ type
     {$IFEND}
   end;
 
+function TReturnAddressInfoCache.AddEntry(AReturnAddress: NativeUInt; const AReturnAddressInfoText: AnsiString): PReturnAddressInfo;
 var
   LReturnAddressInfoCache: TReturnAddressInfoCache;
 
-{$IF CompilerVersion >= 23}
+  Result := @Entries[NextNewEntryIndex];
+
+  {Delete it if it is already in use}
+  DeleteEntry(Result);
+
+  {Step down the tree until an open slot is found in the required direction.}
+  LParentItem := @Entries[0];
+  LAddressBits := AReturnAddress;
+  while True do
+  begin
+    {Get the current child in the appropriate direction.}
+    LChildItem := LParentItem.ChildEntries[LAddressBits and 1];
+    {No child -> This slot is available.}
+    if LChildItem = nil then
+      Break;
+    {Traverse further down the tree.}
+    LParentItem := LChildItem;
+    LAddressBits := LAddressBits shr 1;
+  end;
+  LChildIndex := LAddressBits and 1;
+
+  {Insert the node into the tree}
+  LParentItem.ChildEntries[LChildIndex] := Result;
+  Result.ParentEntry := LParentItem;
+
+  {Set the info text for the item.}
+  Result.ReturnAddress := AReturnAddress;
+  Result.InfoTextLength := Length(AReturnAddressInfoText);
+  if Result.InfoTextLength > CMaxInfoTextLength then
+    Result.InfoTextLength := CMaxInfoTextLength;
+  System.Move(Pointer(AReturnAddressInfoText)^, Result.InfoText, Result.InfoTextLength * SizeOf(AnsiChar));
+end;
+
 procedure TReturnAddressInfoCache.DeleteEntry(AEntry: PReturnAddressInfo);
-{$ELSE}
-procedure TReturnAddressInfoCache_DeleteEntry(AEntry: PReturnAddressInfo);
-{$IFEND}
 var
   LRemovedItemChildIndex, LMovedItemChildIndex: Integer;
   LMovedItem, LChildItem: PReturnAddressInfo;
 begin
-  {$IF CompilerVersion < 23}
-  with LReturnAddressInfoCache do
-    begin
-  {$IFEND}
-    {Is this entry currentlty in the tree?}
-    if AEntry.ParentEntry = nil then
-      Exit;
+  {Is this entry currentlty in the tree?}
+  if AEntry.ParentEntry = nil then
+    Exit;
 
-    LRemovedItemChildIndex := Ord(AEntry.ParentEntry.ChildEntries[1] = AEntry);
+  LRemovedItemChildIndex := Ord(AEntry.ParentEntry.ChildEntries[1] = AEntry);
 
-    {Does this item have children of its own?}
-    if (NativeInt(AEntry.ChildEntries[0]) or NativeInt(AEntry.ChildEntries[1])) <> 0 then
-    begin
-      {It has children:  We need to traverse child items until we find a leaf item and then move it into this item's
-      position in the search tree.}
-      LMovedItem := AEntry;
+  {Does this item have children of its own?}
+  if (NativeInt(AEntry.ChildEntries[0]) or NativeInt(AEntry.ChildEntries[1])) <> 0 then
+  begin
+    {It has children:  We need to traverse child items until we find a leaf item and then move it into this item's
+    position in the search tree.}
+    LMovedItem := AEntry;
 
-      while True do
-      begin
-        LChildItem := LMovedItem.ChildEntries[0]; //try left then right
-        if LChildItem = nil then
-        begin
-          LChildItem := LMovedItem.ChildEntries[1];
-          if LChildItem = nil then
-            Break;
-        end;
-        LMovedItem := LChildItem;
-      end;
-
-      {Disconnect the moved item from its current parent item.}
-      LMovedItemChildIndex := Ord(LMovedItem.ParentEntry.ChildEntries[1] = LMovedItem);
-      LMovedItem.ParentEntry.ChildEntries[LMovedItemChildIndex] := nil;
-
-      {Set the new parent for the moved item}
-      AEntry.ParentEntry.ChildEntries[LRemovedItemChildIndex] := LMovedItem;
-      LMovedItem.ParentEntry := AEntry.ParentEntry;
-
-      {Set the new left child for the moved item}
-      LChildItem := AEntry.ChildEntries[0];
-      if LChildItem <> nil then
-      begin
-        LMovedItem.ChildEntries[0] := LChildItem;
-        LChildItem.ParentEntry := LMovedItem;
-        AEntry.ChildEntries[0] := nil;
-      end;
-
-      {Set the new right child for the moved item}
-      LChildItem := AEntry.ChildEntries[1];
-      if LChildItem <> nil then
-      begin
-        LMovedItem.ChildEntries[1] := LChildItem;
-        LChildItem.ParentEntry := LMovedItem;
-        AEntry.ChildEntries[1] := nil;
-      end;
-
-    end
-    else
-    begin
-      {The deleted item is a leaf item:  Remove it from the tree directly.}
-      AEntry.ParentEntry.ChildEntries[LRemovedItemChildIndex] := nil;
-    end;
-    {Reset the parent for the removed item.}
-    AEntry.ParentEntry := nil;
-  {$IF CompilerVersion < 23}
-    end;
-  {$IFEND}
-end;
-
-{$IF CompilerVersion >= 23}
-function TReturnAddressInfoCache.AddEntry(AReturnAddress: NativeUInt; const AReturnAddressInfoText: AnsiString): PReturnAddressInfo;
-{$ELSE}
-function TReturnAddressInfoCache_AddEntry(AReturnAddress: NativeUInt; const AReturnAddressInfoText: AnsiString): PReturnAddressInfo;
-{$IFEND}
-var
-  LParentItem, LChildItem: PReturnAddressInfo;
-  LAddressBits: NativeUInt;
-  LChildIndex: Integer;
-begin
-  {$IF CompilerVersion < 23}
-  with LReturnAddressInfoCache do
-    begin
-  {$IFEND}
-    {Get the address of the entry to reuse. (Entry 0 is the tree root.)}
-    if NextNewEntryIndex = High(Entries) then
-      NextNewEntryIndex := 0;
-    Inc(NextNewEntryIndex);
-
-    Result := @Entries[NextNewEntryIndex];
-
-    {Delete it if it is already in use}
-    {$IF CompilerVersion >= 23}
-    DeleteEntry(Result);
-    {$ELSE}
-    TReturnAddressInfoCache_DeleteEntry(Result);
-    {$IFEND}
-
-    {Step down the tree until an open slot is found in the required direction.}
-    LParentItem := @Entries[0];
-    LAddressBits := AReturnAddress;
     while True do
     begin
-      {Get the current child in the appropriate direction.}
-      LChildItem := LParentItem.ChildEntries[LAddressBits and 1];
-      {No child -> This slot is available.}
+      LChildItem := LMovedItem.ChildEntries[0]; //try left then right
       if LChildItem = nil then
-        Break;
-      {Traverse further down the tree.}
-      LParentItem := LChildItem;
-      LAddressBits := LAddressBits shr 1;
+      begin
+        LChildItem := LMovedItem.ChildEntries[1];
+        if LChildItem = nil then
+          Break;
+      end;
+      LMovedItem := LChildItem;
     end;
-    LChildIndex := LAddressBits and 1;
 
-    {Insert the node into the tree}
-    LParentItem.ChildEntries[LChildIndex] := Result;
-    Result.ParentEntry := LParentItem;
+    {Disconnect the moved item from its current parent item.}
+    LMovedItemChildIndex := Ord(LMovedItem.ParentEntry.ChildEntries[1] = LMovedItem);
+    LMovedItem.ParentEntry.ChildEntries[LMovedItemChildIndex] := nil;
 
-    {Set the info text for the item.}
-    Result.ReturnAddress := AReturnAddress;
-    Result.InfoTextLength := Length(AReturnAddressInfoText);
-    if Result.InfoTextLength > CMaxInfoTextLength then
-      Result.InfoTextLength := CMaxInfoTextLength;
-    System.Move(Pointer(AReturnAddressInfoText)^, Result.InfoText, Result.InfoTextLength * SizeOf(AnsiChar));
-  {$IF CompilerVersion < 23}
+    {Set the new parent for the moved item}
+    AEntry.ParentEntry.ChildEntries[LRemovedItemChildIndex] := LMovedItem;
+    LMovedItem.ParentEntry := AEntry.ParentEntry;
+
+    {Set the new left child for the moved item}
+    LChildItem := AEntry.ChildEntries[0];
+    if LChildItem <> nil then
+    begin
+      LMovedItem.ChildEntries[0] := LChildItem;
+      LChildItem.ParentEntry := LMovedItem;
+      AEntry.ChildEntries[0] := nil;
     end;
-  {$IFEND}
+
+    {Set the new right child for the moved item}
+    LChildItem := AEntry.ChildEntries[1];
+    if LChildItem <> nil then
+    begin
+      LMovedItem.ChildEntries[1] := LChildItem;
+      LChildItem.ParentEntry := LMovedItem;
+      AEntry.ChildEntries[1] := nil;
+    end;
+
+  end
+  else
+  begin
+    {The deleted item is a leaf item:  Remove it from the tree directly.}
+    AEntry.ParentEntry.ChildEntries[LRemovedItemChildIndex] := nil;
+  end;
+  {Reset the parent for the removed item.}
+  AEntry.ParentEntry := nil;
 end;
 
-{$IF CompilerVersion >= 23}
 function TReturnAddressInfoCache.FindEntry(AReturnAddress: NativeUInt): PReturnAddressInfo;
-{$ELSE}
-function TReturnAddressInfoCache_FindEntry(AReturnAddress: NativeUInt): PReturnAddressInfo;
-{$IFEND}
 var
   LAddressBits: NativeUInt;
   LParentItem: PReturnAddressInfo;
 begin
-  {$IF CompilerVersion < 23}
-  with LReturnAddressInfoCache do
+  LAddressBits := AReturnAddress;
+  LParentItem := @Entries[0];
+  {Step down the tree until the item is found or there is no child item in the required direction.}
+  while True do
+  begin
+    {Get the child item in the required direction.}
+    Result := LParentItem.ChildEntries[LAddressBits and 1];
+    {If there is no child, or the child's key value matches the search key value then we're done.}
+    if (Result = nil)
+      or (Result.ReturnAddress = AReturnAddress) then
     begin
-  {$IFEND}
-    LAddressBits := AReturnAddress;
-    LParentItem := @Entries[0];
-    {Step down the tree until the item is found or there is no child item in the required direction.}
-    while True do
-    begin
-      {Get the child item in the required direction.}
-      Result := LParentItem.ChildEntries[LAddressBits and 1];
-      {If there is no child, or the child's key value matches the search key value then we're done.}
-      if (Result = nil)
-        or (Result.ReturnAddress = AReturnAddress) then
-      begin
-        Exit;
-      end;
-      {The child key value is not a match -> Move down the tree.}
-      LParentItem := Result;
-      LAddressBits := LAddressBits shr 1;
+      Exit;
     end;
-  {$IF CompilerVersion < 23}
-    end;
-  {$IFEND}
+    {The child key value is not a match -> Move down the tree.}
+    LParentItem := Result;
+    LAddressBits := LAddressBits shr 1;
+  end;
 end;
-{$ENDIF JCLDebug}
 
 {--------------------------Stack Tracing Subroutines--------------------------}
 
@@ -522,7 +478,7 @@ var
   LOldMXCSR: Cardinal;
 begin
   {We assume (for now) that all code will execute within the first 4GB of address space.}
-  if (AReturnAddress > $ffff) {$if SizeOf(Pointer) = 8}and (AReturnAddress <= $ffffffff){$IFEND} then
+  if (AReturnAddress > $ffff) {$if SizeOf(Pointer) = 8}and (AReturnAddress <= $ffffffff){$endif} then
   begin
     {The call address is up to 8 bytes before the return address}
     LCallAddress := AReturnAddress - 8;
@@ -696,7 +652,7 @@ begin
         {The pointer to the next stack frame appears valid:  Get the return address of the current frame}
         LReturnAddress := PNativeUInt(LCurrentFrame + SizeOf(Pointer))^;
         {Does this appear to be a valid return address}
-        if (LReturnAddress > $ffff) {$if SizeOf(Pointer) = 8}and (LReturnAddress <= $ffffffff){$IFEND} then
+        if (LReturnAddress > $ffff) {$if SizeOf(Pointer) = 8}and (LReturnAddress <= $ffffffff){$endif} then
         begin
           {Is the map for this return address incorrect? It may be unknown or marked as non-executable because a library
           was previously not yet loaded, or perhaps this is not a valid stack frame.}
@@ -817,6 +773,10 @@ begin
     AString := Format('%s[%s]', [AString, AInfo]);
 end;
 
+var
+  LReturnAddressInfoCache: TReturnAddressInfoCache;
+  LLogStackTrace_Locked: Integer; //0 = unlocked, 1 = locked
+
 function LogStackTrace(AReturnAddresses: PNativeUInt; AMaxDepth: Cardinal; ABuffer: PAnsiChar): PAnsiChar;
 var
   LInd: Cardinal;
@@ -830,6 +790,11 @@ begin
   LLocationCacheInitialized := False;
 
   Result := ABuffer;
+
+  {This routine is protected by a lock - only one thread can be inside it at any given time.}
+  while AtomicCmpExchange(LLogStackTrace_Locked, 1, 0) <> 0 do
+    Winapi.Windows.SwitchToThread;
+
   try
     for LInd := 0 to AMaxDepth - 1 do
     begin
@@ -843,19 +808,14 @@ begin
       Result := NativeUIntToHexBuf(LAddress, Result);
 
       {If the info for the return address is not yet in the cache, add it.}
-      {$IF CompilerVersion >= 23}
       LPInfo := LReturnAddressInfoCache.FindEntry(LAddress);
-      {$ELSE}
-      LPInfo := TReturnAddressInfoCache_FindEntry(LAddress);
-      {$IFEND}
-
       if LPInfo = nil then
       begin
         if not LLocationCacheInitialized then
         begin
           {$if declared(BeginGetLocationInfoCache)} // available depending on the JCL's version
           BeginGetLocationInfoCache;
-          {$IFEND}
+          {$endif}
           LLocationCacheInitialized := True;
         end;
         {Get location info for the caller (at least one byte before the return address).}
@@ -868,7 +828,7 @@ begin
         {Remove UnitName from ProcedureName, no need to output it twice}
         P := PChar(LInfo.ProcedureName);
         if (StrLComp(P, PChar(LInfo.UnitName), Length(LInfo.UnitName)) = 0) and (P[Length(LInfo.UnitName)] = '.') then
-          AppendInfoToString(LTempStr, Copy(LInfo.ProcedureName, Length(LInfo.UnitName) + 2{$IF CompilerVersion < 23},Length( LInfo.ProcedureName )-Length( LInfo.UnitName )-1{$IFEND}))
+          AppendInfoToString(LTempStr, Copy(LInfo.ProcedureName, Length(LInfo.UnitName) + 2))
         else
           AppendInfoToString(LTempStr, LInfo.ProcedureName);
 
@@ -892,8 +852,10 @@ begin
     begin
       {$if declared(BeginGetLocationInfoCache)} // available depending on the JCL's version
       EndGetLocationInfoCache;
-      {$IFEND}
+      {$endif}
     end;
+
+    LLogStackTrace_Locked := 0;
   end;
 end;
 {$endif}
@@ -1154,4 +1116,5 @@ begin
 
   JclStackTrackingOptions := JclStackTrackingOptions + [stAllModules];
 {$endif}
+
 end.
