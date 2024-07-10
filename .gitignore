@@ -38,3 +38,8 @@ FastMM4.o
 FastMM4.ppu
 FastMM4Messages.ppu
 FastMM4Messages.o
+
+FastMM4_AVX512.obj 
+
+/Tests/Simple/SimpleTest.dproj
+/Tests/Simple/SimpleTest.res

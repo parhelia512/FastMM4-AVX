@@ -1,4 +1,5 @@
 .github/workflows/main.yml text eol=lf
+.github/workflows/build-windows.yml.bak text eol=lf
 .github/CODEOWNERS text eol=lf
 .gitattributes text eol=lf
 .gitignore text eol=lf
