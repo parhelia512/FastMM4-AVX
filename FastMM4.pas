@@ -6909,7 +6909,8 @@ procedure MoveX32LpAvx512WithErms(const ASource; var ADest; ACount: NativeInt); 
 {$ENDIF}
 
 { FastMM4_AVX512.obj file is needed to enable AVX-512 code for FastMM4-AVX.
-  Use "nasm.exe -Ox -f win64 FastMM4_AVX512.asm" to compile this .obj file.
+  Use "nasm.exe -Ox -f win64 FastMM4_AVX512.asm" to compile this .obj file,
+  or run the Compile_FastMM4_AVX512.cmd file.
 
   Define DisableAVX512 if you don't want to compile this .obj file.}
 
