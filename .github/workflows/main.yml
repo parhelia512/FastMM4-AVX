@@ -127,16 +127,15 @@ jobs:
       - name: Install FreePascal silently
         run: |
           & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/LOG')
-          Wait-Process -Name fpc_installer -Timeout 60
+          Wait-Process -Name fpc_installer -Timeout 600
 
       - name: Install NASM and grep via Chocolatey
         run: |
-          & 'choco.exe' @('install', 'nasm', 'grep', '-y')
+          & 'choco.exe' @('install', 'nasm', '-y')
 
       - name: Output the installation log
         run: |
-          & 'C:\ProgramData\chocolatey\bin\grep.exe' @('', '\.exe', '%TEMP%\Setup Log *.txt')
-
+          & 'type' @('${{ env.TEMP }}\Setup Log *.txt')
   
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
