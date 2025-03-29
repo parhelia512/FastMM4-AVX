@@ -135,7 +135,7 @@ jobs:
 
       - name: Output the installation log
         run: |
-          & 'type' @('${{ env.TEMP }}\Setup Log *.txt')
+          & 'type' @('%TEMP%\Setup Log *.txt')
   
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
