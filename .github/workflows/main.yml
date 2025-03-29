@@ -16,11 +16,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@latest
+      - uses: actions/checkout@v4
 
       - name: Update apt sources
         run: apt-get update
-
 
       - name: Install Free Pascal
         run: sudo apt-get install -y fpc
@@ -117,6 +116,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install winget
+        uses: Cyberboss/install-winget@v1
 
       - name: Update Winget sources
         run: |
