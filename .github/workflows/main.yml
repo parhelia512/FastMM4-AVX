@@ -130,7 +130,7 @@ jobs:
 
       - name: Output the installation log
         shell: cmd
-        run: type %TEMP%\Setup*.log
+        run: type "%TEMP%\Setup Log*.txt"
 
       - name: Install NASM via Chocolatey
         run: |
