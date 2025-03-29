@@ -126,8 +126,20 @@ jobs:
 
       - name: Install FreePascal silently
         run: |
-          & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-')
+          & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/LOG')
+          Wait-Process -Name fpc_installer -Timeout 600
 
+      - name: Install NASM via Chocolatey
+        run: |
+          & 'choco.exe' @('install', 'nasm', '-y')
+
+      - name: Output the installation log
+        run: |
+          Get-ChildItem -Path "$env:TEMP\Setup Log *.txt" | ForEach-Object { 
+            Write-Host "=== Log file: $($_.FullName) ==="
+            Get-Content -Path $_.FullName
+          }
+  
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
@@ -136,8 +148,7 @@ jobs:
       - name: Compile by FreePascal 32-bit with -dDEBUG (with visible output)
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          $output = & '${{ env.fpc }}' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr') 2>&1
-          $output | Write-Host
+          & '${{ env.fpc }}' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
         run: |
@@ -209,10 +220,6 @@ jobs:
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
           & '${{ env.fpc }}' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
 
-      - name: Install NASM via Chocolatey
-        run: |
-          & 'choco.exe' @('install', 'nasm', '-y')
-  
       - name: Compile AVX-512 Assembly
         run: |
           cd $Env:GITHUB_WORKSPACE
