@@ -129,7 +129,7 @@ jobs:
           & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/LOG')
           Wait-Process -Name fpc_installer -Timeout 600
 
-      - name: Install NASM and grep via Chocolatey
+      - name: Install NASM via Chocolatey
         run: |
           & 'choco.exe' @('install', 'nasm', '-y')
 
