@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Update apt sources
-        run: apt-get update
+        run: sudo apt-get update
 
       - name: Install Free Pascal
         run: sudo apt-get install -y fpc
