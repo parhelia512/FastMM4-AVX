@@ -126,11 +126,11 @@ jobs:
 
       - name: Update Winget sources
         run: |
-          & 'winget.exe' @('--disable-interactivity','source','update')
+          & 'winget.exe' @('source','update','--disable-interactivity')
 
       - name: Install Free Pascal
         run: |
-          & 'winget.exe' @('--disable-interactivity','install','--exact','--id','Lazarus.Lazarus','--silent','--accept-package-agreements','--accept-source-agreements')
+          & 'winget.exe' @('install','--exact','--id','Lazarus.Lazarus','--silent','--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
