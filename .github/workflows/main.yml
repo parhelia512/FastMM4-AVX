@@ -130,7 +130,7 @@ jobs:
 
       - name: Install Free Pascal
         run: |
-          & 'winget.exe' @('install','--exact','--id','Lazarus.Lazarus','--silent','--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
+          & 'winget.exe' @('install','--exact','--id','Lazarus.Lazarus','--locale','en-US,'--silent','--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
