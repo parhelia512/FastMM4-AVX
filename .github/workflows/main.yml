@@ -123,11 +123,11 @@ jobs:
 
       - name: Install FreePascal silently
         run: |
-          & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-')
+          & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/LOG')
 
       - name: Echo PATH (using PowerShell)
-        shell: pwsh
-        run: echo $env:PATH
+        shell: cmd
+        run: type %TEMP%\setup*.txt
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
