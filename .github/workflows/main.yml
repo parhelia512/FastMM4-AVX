@@ -125,6 +125,10 @@ jobs:
         run: |
           & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-')
 
+      - name: Echo PATH (using PowerShell)
+        shell: pwsh
+        run: echo $env:PATH
+
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
