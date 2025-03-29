@@ -114,23 +114,18 @@ jobs:
   build_windows:
     runs-on: windows-latest
     env:
-       fpc: C:\\lazarus\\fpc\\3.2.2\\bin\\x86_64-win64\\fpc.exe
+      fpc: C:\FPC\3.2.2\bin\i386-win32\fpc.exe
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install winget
-        uses: Cyberboss/install-winget@v1
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Winget sources
+      - name: Download FreePascal installer
         run: |
-          & 'winget.exe' @('source','update','--disable-interactivity')
+            & 'curl.exe' @('-L', '-o', 'fpc_installer.exe', 'https://sourceforge.net/projects/freepascal/files/Win32/3.2.2/fpc-3.2.2.win32.and.win64.exe/download')
 
-      - name: Install Free Pascal
+      - name: Install FreePascal silently
         run: |
-          & 'winget.exe' @('install','--exact','--id','Lazarus.Lazarus','--locale','en-US,'--silent','--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
+          & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-')
 
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
