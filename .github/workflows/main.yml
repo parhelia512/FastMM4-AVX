@@ -13,10 +13,15 @@ on:
 
 jobs:
   build_linux:
-    runs-on: self-hosted-linux
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@latest
+
+      - name: Install Free Pascal
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fpc
 
       - name: Compile a simple demo in ObjFPC mode
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC -Tlinux -Px86_64 -O4 SimpleTest.dpr
