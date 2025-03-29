@@ -127,6 +127,7 @@ jobs:
       - name: Install FreePascal silently
         run: |
           & '.\fpc_installer.exe' @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/LOG')
+          Wait-Process -Name fpc_installer -Timeout 60
 
       - name: Output the installation log
         shell: cmd
