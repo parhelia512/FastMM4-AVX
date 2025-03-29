@@ -16,12 +16,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@latest
+
+      - name: Update apt sources
+        run: apt-get update
+
 
       - name: Install Free Pascal
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y fpc
+        run: sudo apt-get install -y fpc
 
       - name: Compile a simple demo in ObjFPC mode
         run: cd $GITHUB_WORKSPACE/Tests/Simple && fpc -B -MObjFPC -Tlinux -Px86_64 -O4 SimpleTest.dpr
@@ -110,3 +112,186 @@ jobs:
           fpc -B -Mdelphi -Tlinux -Px86_64 -dRequireIDEPresenceForLeakReporting -O4 SimpleTest.dpr
 
 
+  build_windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update Winget sources
+        run: |
+          & 'winget.exe' @('source','update','--disable-interactivity')
+
+      - name: Install Free Pascal
+        run: |
+          & 'winget.exe' @('install','-e','--id','FreePascal.FreePascalCompiler','--silent','--accept-package-agreements','--accept-source-agreements')
+
+      - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisableAsmCodeAlign', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDEBUG 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-dFullDebugMode', '-O-', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dFullDebugMode but not DEBUG
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dFullDebugMode', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dAlign16Bytes
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign16Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dAlign32Bytes 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dAlign32Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseCustomFixedSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseCustomFixedSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseCustomVariableSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseCustomVariableSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dForceSingleThreaded
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dForceSingleThreaded', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDisablePauseAndSwitchToThread 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple 
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisablePauseAndSwitchToThread', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseSmallBlocksLockedCriticalSection
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseSmallBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseMediumBlocksLockedCriticalSection 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseMediumBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseLargeBlocksLockedCriticalSection
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseLargeBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDontUseASMVersion
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDontUseASMVersion', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dDisableMemoryLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDisableMemoryLeakReporting', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 32-bit with -dRequireIDEPresenceForLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile AVX-512 Assembly
+        run: |
+          cd $Env:GITHUB_WORKSPACE
+          & 'nasm.exe' @('-Ox', '-Ov', '-f', 'win64', 'FastMM4_AVX512.asm')
+
+      - name: Compile by FreePascal 64-bit with DisableAVX512 to test .noframe
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableAVX512', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDisableAsmCodeAlign
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableAsmCodeAlign', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDEBUG 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDEBUG -dFullDebugMode
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDEBUG', '-g', '-dFullDebugMode', '-O-', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dFullDebugMode but not DEBUG
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dFullDebugMode', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dAlign16Bytes
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dAlign16Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dAlign32Bytes 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dAlign32Bytes', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseCustomFixedSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseCustomFixedSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseCustomVariableSizeMoveRoutines
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseCustomVariableSizeMoveRoutines', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dForceSingleThreaded
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dForceSingleThreaded', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDisablePauseAndSwitchToThread 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple 
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisablePauseAndSwitchToThread', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseSmallBlocksLockedCriticalSection
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseSmallBlocksLockedCriticalSection', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseMediumBlocksLockedCriticalSection 
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseMediumBlocksLockedCriticalSection', '-O4','SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseLargeBlocksLockedCriticalSection
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseLargeBlocksLockedCriticalSection', '-O4','SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDontUseASMVersion
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDontUseASMVersion', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dDisableMemoryLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dDisableMemoryLeakReporting', '-O4', 'SimpleTest.dpr')
+
+      - name: Compile by FreePascal 64-bit with -dRequireIDEPresenceForLeakReporting
+        run: |
+          cd $Env:GITHUB_WORKSPACE/Tests/Simple
+          & 'fpc.exe' @('-B', '-Mdelphi', '-Twin64', '-Px86_64', '-dRequireIDEPresenceForLeakReporting', '-O4', 'SimpleTest.dpr')
