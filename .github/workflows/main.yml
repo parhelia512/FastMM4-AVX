@@ -136,8 +136,7 @@ jobs:
       - name: Compile by FreePascal 32-bit with -dDEBUG (with visible output)
         run: |
           cd $Env:GITHUB_WORKSPACE/Tests/Simple
-          $output = & '${{ env.fpc }}' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr') 2>&1
-          $output | Write-Host
+          & '${{ env.fpc }}' @('-B', '-Mdelphi', '-Twin32', '-Pi386', '-dDEBUG', '-g', '-O-', 'SimpleTest.dpr')
 
       - name: Compile by FreePascal 32-bit with -dDEBUG -dFullDebugMode
         run: |
