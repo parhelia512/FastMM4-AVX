@@ -135,7 +135,10 @@ jobs:
 
       - name: Output the installation log
         run: |
-          & 'type' @('%TEMP%\Setup Log *.txt')
+          Get-ChildItem -Path "$env:TEMP\Setup Log *.txt" | ForEach-Object { 
+            Write-Host "=== Log file: $($_.FullName) ==="
+            Get-Content -Path $_.FullName
+          }
   
       - name: Compile by FreePascal 32-bit with -dDisableAsmCodeAlign
         run: |
